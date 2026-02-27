@@ -1,6 +1,7 @@
 """
 스쿨존 안전 분석 대시보드 — 내 아이가 살기 좋은 동네
-성남시 초등학교 73개 어린이 보호구역 안전등급 시각화 (v11)
+성남시 어린이 보호구역 안전등급 시각화
+팀원 데이터 통합: 시언(V6 142개소) + 광민(50/30/20 60개소) + 경민(가중치)
 
 실행: streamlit run app.py
 """
@@ -20,7 +21,7 @@ import json
 # ──────────────────────────────────────────────
 st.set_page_config(
     page_title="스쿨존 안전 분석 — 성남시",
-    page_icon="🏫",
+    page_icon="\U0001f3eb",
     layout="wide",
 )
 
@@ -83,53 +84,20 @@ section[data-testid="stSidebar"] .stCheckbox label span { font-size: 14px !impor
 """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
-# 2. 상수 & 경로
+# 2. Constants
 # ──────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 
-GRADE_COLORS = {
-    "A": "#154360",
-    "B": "#2471A3",
-    "C": "#85C1E9",
-    "D": "#E74C3C",
-}
-GRADE_LABELS = {
-    "A": "A (우수)",
-    "B": "B (양호)",
-    "C": "C (보통)",
-    "D": "D (주의)",
-}
+GRADE_COLORS = {"A": "#154360", "B": "#2471A3", "C": "#85C1E9", "D": "#E74C3C"}
+GRADE_LABELS = {"A": "A (우수)", "B": "B (양호)", "C": "C (보통)", "D": "D (주의)"}
 
 MAP_CENTER = [37.42, 127.13]
 
-# v11 피처 11개 (감산 41% / 가산 59%)
-V11_FEATURES = {
-    # 위험 (감산 41%)
-    "사고건수_300m":       {"label": "발생건수(300m)",      "weight": -0.30, "category": "위험(감산)"},
-    "CCTV_300m":           {"label": "생활안전CCTV(300m)",   "weight": -0.06, "category": "위험(감산)"},
-    "무인카메라_300m":     {"label": "무인카메라(300m)",     "weight": -0.05, "category": "위험(감산)"},
-    # 안전 (가산 59%)
-    "도로적색표면_300m":   {"label": "도로적색표면(300m)",   "weight": 0.13,  "category": "안전(가산)"},
-    "신호등_300m":         {"label": "신호등(300m)",         "weight": 0.11,  "category": "안전(가산)"},
-    "횡단보도_300m":       {"label": "횡단보도(300m)",       "weight": 0.07,  "category": "안전(가산)"},
-    "도로안전표지_300m":   {"label": "안전표지(300m)",       "weight": 0.07,  "category": "안전(가산)"},
-    "보호구역표지판_300m": {"label": "표지판(300m)",         "weight": 0.07,  "category": "안전(가산)"},
-    "무단횡단방지펜스_300m": {"label": "펜스(300m)",         "weight": 0.07,  "category": "안전(가산)"},
-    "옐로카펫_300m":       {"label": "옐로카펫(300m)",       "weight": 0.05,  "category": "안전(가산)"},
-    "어린이비율":          {"label": "어린이비율(%)",        "weight": 0.02,  "category": "안전(가산)"},
-}
-
-# 개선 제안 매핑 (가산 피처만 — 추가 설치 가능 시설)
-IMPROVEMENT_SUGGESTIONS = {
-    "도로적색표면_300m":     "도로적색표면 추가 설치",
-    "신호등_300m":           "신호등 추가 설치",
-    "횡단보도_300m":         "횡단보도 추가 설치",
-    "도로안전표지_300m":     "도로안전표지 추가 설치",
-    "보호구역표지판_300m":   "보호구역표지판 추가 설치",
-    "무단횡단방지펜스_300m": "무단횡단방지펜스 추가 설치",
-    "옐로카펫_300m":         "옐로카펫 추가 설치",
-}
+# 시설물 컬럼 (6개 — 시언/광민 공통)
+COMMON_FACILITY_COLS = ["도로적색표면", "신호등", "횡단보도", "도로안전표지", "생활안전CCTV", "무인교통단속카메라"]
+# 광민 전용 추가 시설 컬럼
+EXTRA_FACILITY_COLS = ["보호구역표지판", "옐로카펫", "무단횡단방지펜스"]
 
 PLOTLY_LAYOUT = dict(
     font=dict(family="Noto Sans KR, sans-serif"),
@@ -139,29 +107,12 @@ PLOTLY_LAYOUT = dict(
 )
 
 # ──────────────────────────────────────────────
-# 3. 데이터 로딩 (캐시)
+# 3. Data Loading (cached)
 # ──────────────────────────────────────────────
 
 @st.cache_data
-def load_v11():
-    df = pd.read_csv(DATA_DIR / "스쿨존_안전점수_v11.csv", encoding="utf-8-sig")
-    df["안전등급"] = df["등급"].map(GRADE_LABELS)
-    return df
-
-
-@st.cache_data
-def load_cameras():
-    return pd.read_csv(DATA_DIR / "무인교통단속카메라_정제.csv", encoding="utf-8-sig")
-
-
-@st.cache_data
-def load_cctv():
-    return pd.read_csv(DATA_DIR / "생활안전CCTV_정제.csv", encoding="utf-8-sig")
-
-
-@st.cache_data
-def load_signs():
-    return pd.read_csv(DATA_DIR / "도로안전표지_정제.csv", encoding="utf-8-sig")
+def load_data():
+    return pd.read_csv(DATA_DIR / "스쿨존_팀통합_최종.csv", encoding="utf-8-sig")
 
 
 @st.cache_data
@@ -175,6 +126,21 @@ def load_accidents():
 
 
 @st.cache_data
+def load_cctv():
+    return pd.read_csv(DATA_DIR / "생활안전CCTV_정제.csv", encoding="utf-8-sig")
+
+
+@st.cache_data
+def load_cameras():
+    return pd.read_csv(DATA_DIR / "무인교통단속카메라_정제.csv", encoding="utf-8-sig")
+
+
+@st.cache_data
+def load_signs():
+    return pd.read_csv(DATA_DIR / "도로안전표지_정제.csv", encoding="utf-8-sig")
+
+
+@st.cache_data
 def load_population():
     return pd.read_csv(DATA_DIR / "연령별인구_성남시_행정동.csv", encoding="utf-8-sig")
 
@@ -182,8 +148,7 @@ def load_population():
 @st.cache_data
 def load_geojson():
     with open(DATA_DIR / "성남시_행정동_경계.geojson", encoding="utf-8") as f:
-        geo = json.load(f)
-    return geo
+        return json.load(f)
 
 
 @st.cache_data
@@ -197,76 +162,141 @@ def load_traffic():
 
 
 # ──────────────────────────────────────────────
-# 4. 헬퍼 함수
+# 4. Helper Functions
 # ──────────────────────────────────────────────
 
 def calculate_custom_score(df, weights):
-    """사용자 가중치 기반 안전점수 계산 (v11 피처 10개, 0~100 MinMax)"""
+    """경민 가중치 기반 안전점수 계산 (0~100 MinMax)"""
     scores = pd.Series(0.0, index=df.index)
     for feat, w in weights.items():
-        col = df[feat]
+        if feat not in df.columns or w == 0:
+            continue
+        col = df[feat].fillna(0)
         mn, mx = col.min(), col.max()
         if mx > mn:
             norm = (col - mn) / (mx - mn)
         else:
             norm = pd.Series(0.5, index=df.index)
-        # 가중치 부호: +면 높을수록 좋고, -면 높을수록 나쁨
-        info = V11_FEATURES[feat]
-        if info["weight"] < 0:
-            norm = 1 - norm  # 감산 피처: 높을수록 위험 → 반전
+        # 감산 피처: 높을수록 위험 → 반전
+        if feat in ("발생건수", "생활안전CCTV", "무인교통단속카메라"):
+            norm = 1 - norm
         scores += norm * abs(w)
-
-    total_w = sum(abs(w) for w in weights.values())
+    total_w = sum(abs(v) for v in weights.values() if v != 0)
     if total_w > 0:
         scores = scores / total_w * 100
-    else:
-        scores = pd.Series(50.0, index=df.index)
     return scores
 
 
-def assign_custom_grade(score):
-    """사용자 가중치 점수의 등급 (사분위수 대신 고정 임계값)"""
-    if score >= 75:
-        return "A (우수)"
-    elif score >= 65:
-        return "B (양호)"
-    elif score >= 55:
-        return "C (보통)"
-    else:
-        return "D (주의)"
+def assign_grade_by_quartile(scores):
+    """사분위수 기반 등급 부여"""
+    q25, q50, q75 = scores.quantile([0.25, 0.5, 0.75])
+    def _grade(s):
+        if s >= q75:
+            return "A"
+        elif s >= q50:
+            return "B"
+        elif s >= q25:
+            return "C"
+        return "D"
+    return scores.apply(_grade)
 
 
-def make_popup_html(row):
-    grade = row["안전등급"]
+def make_popup_v6(row):
+    """시언 V6 점수 기반 팝업"""
     grade_key = row["등급"]
-    color = GRADE_COLORS[grade_key]
+    color = GRADE_COLORS.get(grade_key, "#999")
+    grade_label = GRADE_LABELS.get(grade_key, grade_key)
     return f"""
     <div style="font-family:'Noto Sans KR',sans-serif;width:260px;padding:4px;">
       <div style="font-size:15px;font-weight:700;color:#1B4F72;margin-bottom:4px;">
-        {row['시설명']}
+        {row['시설물명']}
+        <span style="font-size:11px;color:#85929E;font-weight:400;margin-left:4px;">{row['시설유형']}</span>
       </div>
       <div style="display:inline-block;background:{color};color:#fff;
            padding:2px 10px;border-radius:20px;font-size:12px;font-weight:500;">
-        {grade}
+        {grade_label}
       </div>
       <span style="color:#555;font-size:13px;margin-left:6px;">
         {row['활성_안전점수']:.1f}점
       </span>
       <hr style="margin:8px 0;border:none;border-top:1px solid #D6EAF8;">
       <table style="font-size:11px;color:#555;width:100%;border-collapse:collapse;">
-        <tr style="background:#FDEDEC;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#C0392B;">위험 — 감산 (41%)</td></tr>
-        <tr><td style="padding:2px 4px;">발생건수(300m) 30%</td><td style="text-align:right;">{int(row['사고건수_300m'])}건</td></tr>
-        <tr><td style="padding:2px 4px;">생활안전CCTV 6%</td><td style="text-align:right;">{int(row['CCTV_300m'])}대</td></tr>
-        <tr><td style="padding:2px 4px;">무인카메라 5%</td><td style="text-align:right;">{int(row['무인카메라_300m'])}대</td></tr>
-        <tr style="background:#F0F6FC;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#1B4F72;">안전 — 가산 (59%)</td></tr>
-        <tr><td style="padding:2px 4px;">도로적색표면 13%</td><td style="text-align:right;">{int(row['도로적색표면_300m'])}개</td></tr>
-        <tr><td style="padding:2px 4px;">신호등 11%</td><td style="text-align:right;">{int(row['신호등_300m'])}개</td></tr>
-        <tr><td style="padding:2px 4px;">횡단보도 7%</td><td style="text-align:right;">{int(row['횡단보도_300m'])}개</td></tr>
-        <tr><td style="padding:2px 4px;">안전표지 7%</td><td style="text-align:right;">{int(row['도로안전표지_300m'])}개</td></tr>
-        <tr><td style="padding:2px 4px;">표지판 7%</td><td style="text-align:right;">{int(row['보호구역표지판_300m'])}개</td></tr>
-        <tr><td style="padding:2px 4px;">펜스 7%</td><td style="text-align:right;">{int(row['무단횡단방지펜스_300m'])}개</td></tr>
-        <tr><td style="padding:2px 4px;">옐로카펫 5%</td><td style="text-align:right;">{int(row['옐로카펫_300m'])}개</td></tr>
-        <tr><td style="padding:2px 4px;">어린이비율 2%</td><td style="text-align:right;">{row['어린이비율']:.1f}%</td></tr>
+        <tr style="background:#F0F6FC;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#1B4F72;">V6 점수 구조</td></tr>
+        <tr><td style="padding:2px 4px;">가산점(시설)</td><td style="text-align:right;font-weight:600;">{row['가산점_시설_V6']:.1f}점</td></tr>
+        <tr><td style="padding:2px 4px;">가산점(보너스)</td><td style="text-align:right;font-weight:600;">{int(row['가산점_보너스_V6'])}점</td></tr>
+        <tr style="background:#FDEDEC;"><td style="padding:2px 4px;">감산점 합계</td><td style="text-align:right;font-weight:600;color:#E74C3C;">-{row['감산점_합계_V6']:.1f}점</td></tr>
+        <tr><td style="padding:2px 4px;">기본점(50)</td><td style="text-align:right;">50.0점</td></tr>
+        <tr style="background:#EBF5FB;"><td style="padding:2px 4px;font-weight:700;color:#1B4F72;">최종 V6</td><td style="text-align:right;font-weight:700;color:#1B4F72;">{row['최종안전점수_V6']:.1f}점</td></tr>
+      </table>
+      <hr style="margin:6px 0;border:none;border-top:1px solid #D6EAF8;">
+      <table style="font-size:10px;color:#888;width:100%;border-collapse:collapse;">
+        <tr><td>도로적색표면 {int(row['도로적색표면'])}</td><td>신호등 {int(row['신호등'])}</td><td>횡단보도 {int(row['횡단보도'])}</td></tr>
+        <tr><td>안전표지 {int(row['도로안전표지'])}</td><td>CCTV {int(row['생활안전CCTV'])}</td><td>카메라 {int(row['무인교통단속카메라'])}</td></tr>
+        <tr><td>발생건수 {int(row['발생건수'])}</td><td>어린이비율 {row['어린이비율']:.1f}%</td><td></td></tr>
+      </table>
+    </div>
+    """
+
+
+def make_popup_gm(row):
+    """광민 50/30/20 점수 기반 팝업"""
+    grade_key = row["등급"]
+    color = GRADE_COLORS.get(grade_key, "#999")
+    grade_label = GRADE_LABELS.get(grade_key, grade_key)
+    return f"""
+    <div style="font-family:'Noto Sans KR',sans-serif;width:260px;padding:4px;">
+      <div style="font-size:15px;font-weight:700;color:#1B4F72;margin-bottom:4px;">
+        {row['시설물명']}
+        <span style="font-size:11px;color:#85929E;font-weight:400;margin-left:4px;">{row['시설유형']}</span>
+      </div>
+      <div style="display:inline-block;background:{color};color:#fff;
+           padding:2px 10px;border-radius:20px;font-size:12px;font-weight:500;">
+        {grade_label}
+      </div>
+      <span style="color:#555;font-size:13px;margin-left:6px;">
+        {row['활성_안전점수']:.1f}점
+      </span>
+      <hr style="margin:8px 0;border:none;border-top:1px solid #D6EAF8;">
+      <table style="font-size:11px;color:#555;width:100%;border-collapse:collapse;">
+        <tr style="background:#F0F6FC;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#1B4F72;">100점 만점 구조 (50/30/20)</td></tr>
+        <tr><td style="padding:2px 4px;">시설물 (50점)</td><td style="text-align:right;font-weight:600;">{row['시설물_점수(50점)']:.1f}점</td></tr>
+        <tr><td style="padding:2px 4px;">사고이력 (30점)</td><td style="text-align:right;font-weight:600;">{row['사고이력_점수(30점)']:.1f}점</td></tr>
+        <tr><td style="padding:2px 4px;">인구환경 (20점)</td><td style="text-align:right;font-weight:600;">{row['인구환경_점수(20점)']:.1f}점</td></tr>
+        <tr style="background:#EBF5FB;"><td style="padding:2px 4px;font-weight:700;color:#1B4F72;">최종 안전점수</td><td style="text-align:right;font-weight:700;color:#1B4F72;">{row['최종_안전점수']:.1f}점</td></tr>
+      </table>
+      <hr style="margin:6px 0;border:none;border-top:1px solid #D6EAF8;">
+      <table style="font-size:10px;color:#888;width:100%;border-collapse:collapse;">
+        <tr><td>적색표면 {int(row['도로적색표면'])}</td><td>신호등 {int(row['신호등'])}</td><td>횡단보도 {int(row['횡단보도'])}</td></tr>
+        <tr><td>안전표지 {int(row['도로안전표지'])}</td><td>CCTV {int(row['생활안전CCTV'])}</td><td>카메라 {int(row['무인교통단속카메라'])}</td></tr>
+        <tr><td>표지판 {int(row.get('보호구역표지판', 0))}</td><td>옐로카펫 {int(row.get('옐로카펫', 0))}</td><td>펜스 {int(row.get('무단횡단방지펜스', 0))}</td></tr>
+      </table>
+    </div>
+    """
+
+
+def make_popup_custom(row):
+    """가중치 직접 설정 모드 팝업"""
+    grade_key = row["등급"]
+    color = GRADE_COLORS.get(grade_key, "#999")
+    grade_label = GRADE_LABELS.get(grade_key, grade_key)
+    return f"""
+    <div style="font-family:'Noto Sans KR',sans-serif;width:260px;padding:4px;">
+      <div style="font-size:15px;font-weight:700;color:#1B4F72;margin-bottom:4px;">
+        {row['시설물명']}
+        <span style="font-size:11px;color:#85929E;font-weight:400;margin-left:4px;">{row['시설유형']}</span>
+      </div>
+      <div style="display:inline-block;background:{color};color:#fff;
+           padding:2px 10px;border-radius:20px;font-size:12px;font-weight:500;">
+        {grade_label}
+      </div>
+      <span style="color:#555;font-size:13px;margin-left:6px;">
+        {row['활성_안전점수']:.1f}점 (사용자 가중치)
+      </span>
+      <hr style="margin:8px 0;border:none;border-top:1px solid #D6EAF8;">
+      <table style="font-size:10px;color:#888;width:100%;border-collapse:collapse;">
+        <tr><td>적색표면 {int(row['도로적색표면'])}</td><td>신호등 {int(row['신호등'])}</td><td>횡단보도 {int(row['횡단보도'])}</td></tr>
+        <tr><td>안전표지 {int(row['도로안전표지'])}</td><td>CCTV {int(row['생활안전CCTV'])}</td><td>카메라 {int(row['무인교통단속카메라'])}</td></tr>
+        <tr><td>발생건수 {int(row['발생건수'])}</td><td>어린이비율 {row['어린이비율']:.1f}%</td><td></td></tr>
       </table>
     </div>
     """
@@ -291,30 +321,10 @@ def create_legend_html():
     """
 
 
-def get_improvement_suggestion(row, df):
-    """예방시설 중 가장 부족한 항목 기반 개선 제안"""
-    prevention_feats = [f for f, info in V11_FEATURES.items() if info["weight"] > 0]
-    worst_feat = None
-    worst_percentile = 1.0
-    for feat in prevention_feats:
-        if feat in row.index and feat in df.columns:
-            val = row[feat]
-            mx = df[feat].max()
-            pct = val / mx if mx > 0 else 1.0
-            if pct < worst_percentile:
-                worst_percentile = pct
-                worst_feat = feat
-    if worst_feat and worst_feat in IMPROVEMENT_SUGGESTIONS:
-        current = int(row[worst_feat])
-        median = int(df[worst_feat].median())
-        return f"{IMPROVEMENT_SUGGESTIONS[worst_feat]} (현재 {current}개, 중앙값 {median}개)"
-    return "추가 분석 필요"
-
-
-def create_map(filtered_df, overlay_flags, pop_df, geo):
+def create_map(filtered_df, overlay_flags, pop_df, geo, popup_fn):
     m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles="cartodbpositron")
 
-    if geo and geo["features"]:
+    if geo and geo.get("features"):
         choropleth_data = pop_df[["구명", "동명", "어린이_비율"]].copy()
         choropleth_data["adm_nm"] = "경기도 성남시" + choropleth_data["구명"] + " " + choropleth_data["동명"]
         folium.Choropleth(
@@ -331,17 +341,20 @@ def create_map(filtered_df, overlay_flags, pop_df, geo):
 
     for _, row in filtered_df.iterrows():
         grade_key = row["등급"]
-        color = GRADE_COLORS[grade_key]
+        color = GRADE_COLORS.get(grade_key, "#999")
+        grade_label = GRADE_LABELS.get(grade_key, grade_key)
+        # Marker size: bigger for 초등학교
+        radius = 9 if row["시설유형"] == "초등학교" else 6
         folium.CircleMarker(
             location=[row["위도"], row["경도"]],
-            radius=9,
+            radius=radius,
             color="#FFFFFF",
             weight=2,
             fill=True,
             fill_color=color,
             fill_opacity=0.9,
-            popup=folium.Popup(make_popup_html(row), max_width=290),
-            tooltip=f"{row['시설명']} ({row['안전등급']})",
+            popup=folium.Popup(popup_fn(row), max_width=290),
+            tooltip=f"{row['시설물명']} ({grade_label}) {row['활성_안전점수']:.1f}점",
         ).add_to(m)
 
     if overlay_flags.get("지킴이집"):
@@ -400,21 +413,87 @@ def create_map(filtered_df, overlay_flags, pop_df, geo):
 
 
 # ──────────────────────────────────────────────
-# 5. 사이드바
+# 5. Sidebar
 # ──────────────────────────────────────────────
-df = load_v11()
+df_raw = load_data()
+df = df_raw.copy()
 
 st.sidebar.markdown(
     "<h2 style='text-align:center;margin-bottom:0;'>스쿨존 안전 분석</h2>"
-    "<p style='text-align:center;opacity:0.6;font-size:13px;'>성남시 초등학교 73개</p>",
+    "<p style='text-align:center;opacity:0.6;font-size:13px;'>성남시 어린이 보호구역</p>",
     unsafe_allow_html=True,
 )
 st.sidebar.markdown("---")
 
+# ── 점수 산출 방식 ──
+st.sidebar.markdown(
+    "<p style='font-weight:600;font-size:14px;margin-bottom:8px;'>점수 산출 방식</p>",
+    unsafe_allow_html=True,
+)
+scoring_mode = st.sidebar.radio(
+    "점수 모드",
+    ["시언 V6 안전점수 (142개소)", "광민 100점 안전점수 (60개소)", "가중치 직접 설정"],
+    label_visibility="collapsed",
+)
+
+feature_weights = None
+if scoring_mode == "시언 V6 안전점수 (142개소)":
+    df["활성_안전점수"] = df["최종안전점수_V6"]
+    df["등급"] = df["등급_V6"]
+    df["안전등급"] = df["등급_V6"].map(GRADE_LABELS)
+    score_label = "V6 안전점수"
+    popup_fn = make_popup_v6
+elif scoring_mode == "광민 100점 안전점수 (60개소)":
+    df = df[df["최종_안전점수"].notna()].copy()
+    df["활성_안전점수"] = df["최종_안전점수"]
+    df["등급"] = df["등급_광민"]
+    df["안전등급"] = df["등급_광민"].map(GRADE_LABELS)
+    score_label = "100점 안전점수"
+    popup_fn = make_popup_gm
+else:
+    # 가중치 직접 설정 모드
+    st.sidebar.markdown(
+        "<p style='font-size:12px;opacity:0.7;margin-bottom:4px;'>카테고리별 가중치 (0~10)</p>",
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown("<p style='font-size:11px;opacity:0.5;margin:0;'>── 위험 (감산) ──</p>", unsafe_allow_html=True)
+    w_acc = st.sidebar.slider("발생건수 (감산)", 0, 10, 3, key="w_acc")
+    w_cctv = st.sidebar.slider("CCTV (감산)", 0, 10, 1, key="w_cctv")
+    w_cam = st.sidebar.slider("무인카메라 (감산)", 0, 10, 1, key="w_cam")
+    st.sidebar.markdown("<p style='font-size:11px;opacity:0.5;margin:0;'>── 안전 (가산) ──</p>", unsafe_allow_html=True)
+    w_red = st.sidebar.slider("도로적색표면", 0, 10, 3, key="w_red")
+    w_signal = st.sidebar.slider("신호등", 0, 10, 2, key="w_sig")
+    w_cross = st.sidebar.slider("횡단보도", 0, 10, 1, key="w_cross")
+    w_rsign = st.sidebar.slider("안전표지", 0, 10, 1, key="w_rsign")
+    w_child = st.sidebar.slider("어린이비율 (가산)", 0, 10, 1, key="w_child")
+    feature_weights = {
+        "발생건수": w_acc,
+        "생활안전CCTV": w_cctv,
+        "무인교통단속카메라": w_cam,
+        "도로적색표면": w_red,
+        "신호등": w_signal,
+        "횡단보도": w_cross,
+        "도로안전표지": w_rsign,
+        "어린이비율": w_child,
+    }
+    df["활성_안전점수"] = calculate_custom_score(df, feature_weights)
+    df["등급"] = assign_grade_by_quartile(df["활성_안전점수"])
+    df["안전등급"] = df["등급"].map(GRADE_LABELS)
+    score_label = "사용자 가중치 점수"
+    popup_fn = make_popup_custom
+
+st.sidebar.markdown("---")
+
+# ── 시설 유형 필터 ──
+available_types = sorted(df["시설유형"].dropna().unique().tolist())
+selected_types = st.sidebar.multiselect("시설 유형", options=available_types, default=available_types)
+
+# ── 구 필터 ──
 available_gu = sorted(df["구"].dropna().unique().tolist())
 selected_gu = st.sidebar.multiselect("구 선택", options=available_gu, default=available_gu)
 
-available_grades = [GRADE_LABELS[g] for g in ["A", "B", "C", "D"]]
+# ── 등급 필터 ──
+available_grades = [GRADE_LABELS[g] for g in ["A", "B", "C", "D"] if GRADE_LABELS[g] in df["안전등급"].values]
 selected_grades = st.sidebar.multiselect("안전등급", options=available_grades, default=available_grades)
 
 st.sidebar.markdown("---")
@@ -427,69 +506,14 @@ ov_accident = st.sidebar.checkbox("사고다발지", value=True)
 ov_cctv = st.sidebar.checkbox("생활안전 CCTV", value=False)
 ov_camera = st.sidebar.checkbox("무인교통단속카메라", value=False)
 ov_sign = st.sidebar.checkbox("도로안전표지", value=False)
-
 overlay_flags = {
     "지킴이집": ov_guardhouse, "사고다발지": ov_accident,
     "CCTV": ov_cctv, "카메라": ov_camera, "표지판": ov_sign,
 }
 
 st.sidebar.markdown("---")
-school_list = ["(전체)"] + sorted(df["시설명"].tolist())
-selected_school = st.sidebar.selectbox("개별 학교 선택", school_list)
-
-# 점수 산출 방식
-st.sidebar.markdown("---")
-st.sidebar.markdown(
-    "<p style='font-weight:600;font-size:14px;margin-bottom:8px;'>점수 산출 방식</p>",
-    unsafe_allow_html=True,
-)
-scoring_mode = st.sidebar.radio(
-    "점수 산출",
-    ["v11 안전점수 (감산41%/가산59%)", "가중치 직접 설정"],
-    label_visibility="collapsed",
-)
-
-feature_weights = None
-if scoring_mode == "가중치 직접 설정":
-    st.sidebar.markdown(
-        "<p style='font-size:12px;opacity:0.7;margin-bottom:4px;'>카테고리별 가중치 (0~10)</p>",
-        unsafe_allow_html=True,
-    )
-    st.sidebar.markdown("<p style='font-size:11px;opacity:0.5;margin:0;'>── 위험 (감산) ──</p>", unsafe_allow_html=True)
-    w_accident = st.sidebar.slider("발생건수 (감산)", 0, 10, 3, key="w_acc")
-    w_cctv = st.sidebar.slider("CCTV (감산)", 0, 10, 1, key="w_cctv")
-    w_cam = st.sidebar.slider("무인카메라 (감산)", 0, 10, 1, key="w_cam")
-    st.sidebar.markdown("<p style='font-size:11px;opacity:0.5;margin:0;'>── 안전 (가산) ──</p>", unsafe_allow_html=True)
-    w_red = st.sidebar.slider("도로적색표면", 0, 10, 3, key="w_red")
-    w_signal = st.sidebar.slider("신호등", 0, 10, 2, key="w_sig")
-    w_cross = st.sidebar.slider("횡단보도", 0, 10, 1, key="w_cross")
-    w_roadsign = st.sidebar.slider("안전표지", 0, 10, 1, key="w_rsign")
-    w_zonesign = st.sidebar.slider("표지판", 0, 10, 1, key="w_zsign")
-    w_fence = st.sidebar.slider("펜스", 0, 10, 1, key="w_fence")
-    w_yellow = st.sidebar.slider("옐로카펫", 0, 10, 1, key="w_yel")
-    w_child = st.sidebar.slider("어린이비율 (가산)", 0, 10, 1, key="w_child")
-    feature_weights = {
-        "사고건수_300m": w_accident,
-        "CCTV_300m": w_cctv,
-        "무인카메라_300m": w_cam,
-        "도로적색표면_300m": w_red,
-        "신호등_300m": w_signal,
-        "횡단보도_300m": w_cross,
-        "도로안전표지_300m": w_roadsign,
-        "보호구역표지판_300m": w_zonesign,
-        "무단횡단방지펜스_300m": w_fence,
-        "옐로카펫_300m": w_yellow,
-        "어린이비율": w_child,
-    }
-
-# ── 점수 계산 (모드에 따라) ──
-if scoring_mode == "가중치 직접 설정" and feature_weights is not None:
-    df["활성_안전점수"] = calculate_custom_score(df, feature_weights)
-    df["안전등급"] = df["활성_안전점수"].apply(assign_custom_grade)
-    score_label = "사용자 가중치 안전점수"
-else:
-    df["활성_안전점수"] = df["안전점수"]
-    score_label = "안전점수 v11"
+school_list = ["(전체)"] + sorted(df["시설물명"].tolist())
+selected_school = st.sidebar.selectbox("개별 시설 선택", school_list)
 
 # CSV 다운로드
 st.sidebar.markdown("---")
@@ -497,79 +521,87 @@ st.sidebar.markdown(
     "<p style='font-weight:600;font-size:14px;margin-bottom:8px;'>데이터 내보내기</p>",
     unsafe_allow_html=True,
 )
-csv_cols = ["시설명", "구", "도로명주소", "안전등급", "활성_안전점수",
-            "사고건수_300m", "CCTV_300m", "무인카메라_300m",
-            "도로적색표면_300m", "신호등_300m", "횡단보도_300m",
-            "도로안전표지_300m", "보호구역표지판_300m", "무단횡단방지펜스_300m",
-            "옐로카펫_300m", "어린이비율"]
-csv_export = df[csv_cols].copy()
-csv_export = csv_export.rename(columns={"활성_안전점수": "안전점수"})
+csv_cols = ["시설물명", "시설유형", "구", "안전등급", "활성_안전점수"]
+# Add score-specific columns
+if scoring_mode == "광민 100점 안전점수 (60개소)":
+    csv_cols += ["시설물_점수(50점)", "사고이력_점수(30점)", "인구환경_점수(20점)"]
+elif scoring_mode == "시언 V6 안전점수 (142개소)":
+    csv_cols += ["가산점_시설_V6", "가산점_보너스_V6", "감산점_합계_V6"]
+csv_cols += COMMON_FACILITY_COLS + ["발생건수", "어린이비율"]
+csv_cols = [c for c in csv_cols if c in df.columns]
+csv_export = df[csv_cols].copy().rename(columns={"활성_안전점수": "안전점수"})
 st.sidebar.download_button(
     label="CSV 다운로드",
     data=csv_export.to_csv(index=False, encoding="utf-8-sig"),
-    file_name="스쿨존_안전분석_v11.csv",
+    file_name="스쿨존_안전분석.csv",
     mime="text/csv",
 )
 
-
 # ──────────────────────────────────────────────
-# 6. 메인 콘텐츠
+# 6. Main Content
 # ──────────────────────────────────────────────
 filtered_df = df[
-    df["구"].isin(selected_gu)
+    df["시설유형"].isin(selected_types)
+    & df["구"].isin(selected_gu)
     & df["안전등급"].isin(selected_grades)
 ]
 
-st.markdown("""
+# Header
+mode_tag = {
+    "시언 V6 안전점수 (142개소)": "시언 V6",
+    "광민 100점 안전점수 (60개소)": "광민 50/30/20",
+    "가중치 직접 설정": "사용자 가중치",
+}.get(scoring_mode, "")
+
+st.markdown(f"""
 <div style="margin-bottom:8px;">
     <span style="font-size:36px;font-weight:700;color:#1B4F72;">
         내 아이가 살기 좋은 동네
     </span>
     <span style="font-size:14px;color:#85929E;margin-left:12px;">
-        성남시 초등학교 73개 어린이 보호구역 안전 분석 대시보드 (v11)
+        성남시 어린이 보호구역 안전 분석 대시보드 &nbsp;|&nbsp; {mode_tag}
     </span>
 </div>
 """, unsafe_allow_html=True)
 
-# — D등급 경고 배너 —
-d_grade_schools = df[df["등급"] == "D"]
-if len(d_grade_schools) > 0:
-    school_names = " / ".join(d_grade_schools["시설명"].tolist()[:10])
-    extra = f" 외 {len(d_grade_schools)-10}개" if len(d_grade_schools) > 10 else ""
+# D등급 경고 배너
+d_grade = filtered_df[filtered_df["등급"] == "D"]
+if len(d_grade) > 0:
+    names = " / ".join(d_grade["시설물명"].tolist()[:10])
+    extra = f" 외 {len(d_grade)-10}개" if len(d_grade) > 10 else ""
     st.markdown(
         f'<div class="warning-banner">'
-        f'<b>주의 필요 {len(d_grade_schools)}개소</b> &nbsp; '
-        f'<span>{school_names}{extra}</span>'
+        f'<b>주의 필요 {len(d_grade)}개소</b> &nbsp; '
+        f'<span>{names}{extra}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
-# — KPI —
+# KPIs
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("초등학교 수", f"{len(filtered_df)}개교")
-avg_score = filtered_df["활성_안전점수"].mean()
-k2.metric("평균 안전점수", f"{avg_score:.1f}" if len(filtered_df) else "-")
+k1.metric("시설 수", f"{len(filtered_df)}개소")
+avg_score = filtered_df["활성_안전점수"].mean() if len(filtered_df) else 0
+k2.metric("평균 안전점수", f"{avg_score:.1f}")
 safe_ratio = (
-    (filtered_df["등급"].isin(["A", "B"])).sum()
-    / len(filtered_df) * 100
+    (filtered_df["등급"].isin(["A", "B"])).sum() / len(filtered_df) * 100
     if len(filtered_df) else 0
 )
 k3.metric("안전(A+B) 비율", f"{safe_ratio:.0f}%")
-total_accidents = int(filtered_df["사고건수_300m"].sum())
-k4.metric("사고건수 합계(300m)", f"{total_accidents}건")
+total_accidents = int(filtered_df["발생건수"].sum())
+k4.metric("사고건수 합계", f"{total_accidents}건")
 
 st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
-# — 탭 —
+# Tabs
 tab_map, tab_analysis, tab_district = st.tabs(["지도", "상세분석", "동네정보"])
 
 # ============================
-# 탭1: 지도
+# Tab 1: 지도
 # ============================
 with tab_map:
     pop_df = load_population()
     geo = load_geojson()
-    m = create_map(filtered_df, overlay_flags, pop_df, geo)
+    m = create_map(filtered_df, overlay_flags, pop_df, geo, popup_fn)
     st_folium(m, height=550, use_container_width=True, returned_objects=[])
 
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
@@ -577,7 +609,7 @@ with tab_map:
 
     top5 = (
         filtered_df.nlargest(5, "활성_안전점수")[
-            ["시설명", "구", "안전등급", "활성_안전점수"]
+            ["시설물명", "시설유형", "구", "안전등급", "활성_안전점수"]
         ]
         .rename(columns={"활성_안전점수": "안전점수"})
         .reset_index(drop=True)
@@ -589,7 +621,7 @@ with tab_map:
 
     bot5 = (
         filtered_df.nsmallest(5, "활성_안전점수")[
-            ["시설명", "구", "안전등급", "활성_안전점수"]
+            ["시설물명", "시설유형", "구", "안전등급", "활성_안전점수"]
         ]
         .rename(columns={"활성_안전점수": "안전점수"})
         .reset_index(drop=True)
@@ -600,52 +632,79 @@ with tab_map:
         st.dataframe(bot5, use_container_width=True)
 
 # ============================
-# 탭2: 상세분석
+# Tab 2: 상세분석
 # ============================
 with tab_analysis:
-    # — 가중치 구조 시각화 —
-    weight_data = pd.DataFrame([
-        {"피처": info["label"], "가중치": abs(info["weight"]) * 100,
-         "카테고리": info["category"], "방향": "감산" if info["weight"] < 0 else "가산"}
-        for feat, info in V11_FEATURES.items()
-    ])
-    weight_sorted = weight_data.sort_values("가중치", ascending=True)
-    colors = {"가산": "#2E86C1", "감산": "#E74C3C"}
-    fig_weight = px.bar(
-        weight_sorted,
-        x="가중치", y="피처", orientation="h",
-        color="방향",
-        title="v11 안전점수 가중치 구조 (감산 41% / 가산 59%)",
-        labels={"가중치": "가중치 (%)", "피처": ""},
-        color_discrete_map=colors,
-        text="가중치",
-    )
-    fig_weight.update_traces(texttemplate="%{text:.0f}%", textposition="outside")
-    fig_weight.update_layout(**PLOTLY_LAYOUT, height=420, bargap=0.15)
-    st.plotly_chart(fig_weight, use_container_width=True)
+    # ── 점수 구조 시각화 ──
+    if scoring_mode == "시언 V6 안전점수 (142개소)":
+        st.markdown("##### V6 점수 구조: 기본(50) + 가산점(시설+보너스) - 감산점")
+        v6_struct = pd.DataFrame({
+            "항목": ["가산점_시설", "가산점_보너스", "감산점_합계"],
+            "평균": [
+                df["가산점_시설_V6"].mean(),
+                df["가산점_보너스_V6"].mean(),
+                -df["감산점_합계_V6"].mean(),
+            ],
+            "색상": ["#2E86C1", "#5DADE2", "#E74C3C"],
+        })
+        fig_struct = px.bar(
+            v6_struct, x="항목", y="평균",
+            title="V6 점수 구성 요소 평균",
+            color="항목",
+            color_discrete_map={
+                "가산점_시설": "#2E86C1",
+                "가산점_보너스": "#5DADE2",
+                "감산점_합계": "#E74C3C",
+            },
+            text="평균",
+        )
+        fig_struct.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+        fig_struct.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
+        st.plotly_chart(fig_struct, use_container_width=True)
+
+    elif scoring_mode == "광민 100점 안전점수 (60개소)":
+        st.markdown("##### 100점 만점 구조: 시설물(50) + 사고이력(30) + 인구환경(20)")
+        gm_struct = pd.DataFrame({
+            "항목": ["시설물(50점)", "사고이력(30점)", "인구환경(20점)"],
+            "평균": [
+                df["시설물_점수(50점)"].mean(),
+                df["사고이력_점수(30점)"].mean(),
+                df["인구환경_점수(20점)"].mean(),
+            ],
+        })
+        fig_struct = px.bar(
+            gm_struct, x="항목", y="평균",
+            title="50/30/20 점수 구성 요소 평균",
+            color="항목",
+            color_discrete_map={
+                "시설물(50점)": "#1B4F72",
+                "사고이력(30점)": "#E74C3C",
+                "인구환경(20점)": "#F39C12",
+            },
+            text="평균",
+        )
+        fig_struct.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+        fig_struct.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
+        st.plotly_chart(fig_struct, use_container_width=True)
 
     col_hist, col_radar = st.columns(2)
 
     with col_hist:
         fig_hist = px.histogram(
             df, x="활성_안전점수", nbins=20,
-            title="안전점수 분포",
+            title=f"안전점수 분포 ({score_label})",
             labels={"활성_안전점수": score_label},
             color_discrete_sequence=["#2E86C1"],
         )
-        fig_hist.update_layout(**PLOTLY_LAYOUT, height=380, yaxis_title="학교 수", bargap=0.08)
+        fig_hist.update_layout(**PLOTLY_LAYOUT, height=380, yaxis_title="시설 수", bargap=0.08)
         st.plotly_chart(fig_hist, use_container_width=True)
 
     with col_radar:
         if selected_school != "(전체)":
-            school_row = df[df["시설명"] == selected_school].iloc[0]
+            school_row = df[df["시설물명"] == selected_school].iloc[0]
 
-            # 레이더 차트 — 주요 6개 피처 선별
-            radar_feats = [
-                "사고건수_300m", "도로적색표면_300m", "신호등_300m",
-                "횡단보도_300m", "CCTV_300m", "옐로카펫_300m",
-            ]
-            radar_labels = [V11_FEATURES[f]["label"] for f in radar_feats]
+            radar_feats = COMMON_FACILITY_COLS
+            radar_labels = radar_feats.copy()
 
             vals = []
             for f in radar_feats:
@@ -673,20 +732,17 @@ with tab_analysis:
             )
             st.plotly_chart(fig_radar, use_container_width=True)
 
-            # 학교 상세 카드
-            grade = school_row["안전등급"]
-            grade_color = GRADE_COLORS[school_row["등급"]]
-            suggestion = get_improvement_suggestion(school_row, df)
+            # 상세 카드
+            grade_color = GRADE_COLORS.get(school_row["등급"], "#999")
+            grade_label = GRADE_LABELS.get(school_row["등급"], school_row["등급"])
             st.markdown(
                 f"<div style='background:#F0F6FC;padding:12px 16px;border-radius:8px;"
                 f"border-left:4px solid {grade_color};'>"
                 f"<b style='color:#1B4F72;'>{selected_school}</b> &nbsp; "
                 f"<span style='background:{grade_color};color:#fff;padding:2px 10px;"
-                f"border-radius:20px;font-size:12px;'>{grade}</span> &nbsp; "
+                f"border-radius:20px;font-size:12px;'>{grade_label}</span> &nbsp; "
                 f"<span style='color:#555;'>{score_label}: <b>{school_row['활성_안전점수']:.1f}</b></span> &nbsp; "
-                f"<span style='color:#555;'>사고건수: <b>{int(school_row['사고건수_300m'])}</b>건</span>"
-                f"<div style='margin-top:8px;color:#2E86C1;font-size:13px;'>"
-                f"개선 제안: {suggestion}</div>"
+                f"<span style='color:#555;'>발생건수: <b>{int(school_row['발생건수'])}</b>건</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -694,24 +750,22 @@ with tab_analysis:
             st.markdown(
                 "<div style='background:#F0F6FC;padding:20px;border-radius:8px;"
                 "text-align:center;color:#5DADE2;margin-top:40px;'>"
-                "사이드바에서 개별 학교를 선택하면<br>레이더 차트가 표시됩니다."
+                "사이드바에서 개별 시설을 선택하면<br>레이더 차트가 표시됩니다."
                 "</div>",
                 unsafe_allow_html=True,
             )
 
-    # — 등급별 사고율 비교 —
+    # ── 등급별 현황 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 등급별 사고 현황 (v11 검증)")
+    st.markdown("##### 등급별 현황")
     grade_stats = df.groupby("등급").agg(
-        학교수=("시설명", "count"),
-        사고경험_비율=("사고유무_300m", "mean"),
-        평균_사고건수=("사고건수_300m", "mean"),
+        시설수=("시설물명", "count"),
+        평균_발생건수=("발생건수", "mean"),
         평균_안전점수=("활성_안전점수", "mean"),
     ).reindex(["A", "B", "C", "D"]).reset_index()
-    grade_stats["사고경험_비율"] = (grade_stats["사고경험_비율"] * 100).round(1)
-    grade_stats["평균_사고건수"] = grade_stats["평균_사고건수"].round(1)
+    grade_stats["평균_발생건수"] = grade_stats["평균_발생건수"].round(1)
     grade_stats["평균_안전점수"] = grade_stats["평균_안전점수"].round(1)
-    grade_stats.columns = ["등급", "학교 수", "사고율(%)", "평균 사고건수", "평균 안전점수"]
+    grade_stats.columns = ["등급", "시설 수", "평균 발생건수", "평균 안전점수"]
 
     col_table, col_bar = st.columns(2)
     with col_table:
@@ -719,39 +773,74 @@ with tab_analysis:
 
     with col_bar:
         fig_acc = px.bar(
-            grade_stats, x="등급", y="사고율(%)",
-            title="등급별 사고율 (A < B < C < D 단조감소 확인)",
+            grade_stats, x="등급", y="평균 발생건수",
+            title="등급별 평균 사고 발생건수",
             color="등급",
             color_discrete_map={g: GRADE_COLORS[g] for g in ["A", "B", "C", "D"]},
-            text="사고율(%)",
+            text="평균 발생건수",
         )
-        fig_acc.update_traces(texttemplate="%{text}%", textposition="outside")
+        fig_acc.update_traces(texttemplate="%{text}", textposition="outside")
         fig_acc.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
         st.plotly_chart(fig_acc, use_container_width=True)
 
-    # — 개선이 필요한 스쿨존 —
+    # ── 시설유형별 현황 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 개선이 필요한 스쿨존")
-    low_schools = df[df["등급"].isin(["D", "C"])].sort_values("활성_안전점수")
-    if len(low_schools) > 0:
-        for _, row in low_schools.iterrows():
-            grade = row["안전등급"]
-            grade_color = GRADE_COLORS[row["등급"]]
-            suggestion = get_improvement_suggestion(row, df)
+    st.markdown("##### 시설유형별 안전점수")
+    type_stats = df.groupby("시설유형").agg(
+        시설수=("시설물명", "count"),
+        평균점수=("활성_안전점수", "mean"),
+        평균_발생건수=("발생건수", "mean"),
+    ).reset_index()
+    type_stats["평균점수"] = type_stats["평균점수"].round(1)
+    type_stats["평균_발생건수"] = type_stats["평균_발생건수"].round(1)
+
+    fig_type = px.bar(
+        type_stats.sort_values("평균점수"), x="평균점수", y="시설유형",
+        orientation="h",
+        title="시설유형별 평균 안전점수",
+        labels={"평균점수": "평균 안전점수", "시설유형": ""},
+        color="평균점수",
+        color_continuous_scale=[[0, "#E74C3C"], [0.5, "#85C1E9"], [1, "#154360"]],
+        text="시설수",
+    )
+    fig_type.update_traces(texttemplate="%{text}개소", textposition="outside")
+    fig_type.update_layout(**PLOTLY_LAYOUT, height=280, coloraxis_showscale=False)
+    st.plotly_chart(fig_type, use_container_width=True)
+
+    # ── D등급 개선 제안 ──
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+    st.markdown("##### 주의 필요 시설 (D등급)")
+    low_facilities = df[df["등급"] == "D"].sort_values("활성_안전점수")
+    if len(low_facilities) > 0:
+        for _, row in low_facilities.iterrows():
+            grade_color = GRADE_COLORS["D"]
+            # 가장 부족한 시설 찾기
+            worst = None
+            worst_pct = 1.0
+            for f in COMMON_FACILITY_COLS:
+                mx = df[f].max()
+                if mx > 0:
+                    pct = row[f] / mx
+                    if pct < worst_pct:
+                        worst_pct = pct
+                        worst = f
+            suggestion = f"{worst} 보강 필요 (현재 {int(row[worst])}개)" if worst else "추가 분석 필요"
             st.markdown(
                 f'<div class="suggestion-card">'
-                f'<span class="school-name">{row["시설명"]}</span> &nbsp; '
+                f'<span class="school-name">{row["시설물명"]}</span> '
+                f'<span style="font-size:11px;color:#85929E;">({row["시설유형"]})</span> &nbsp; '
                 f'<span style="background:{grade_color};color:#fff;padding:2px 10px;'
-                f'border-radius:20px;font-size:11px;">{grade} ({row["활성_안전점수"]:.1f}점)</span>'
+                f'border-radius:20px;font-size:11px;">D ({row["활성_안전점수"]:.1f}점)</span>'
                 f'<div class="suggestion">개선 제안: {suggestion}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
     else:
-        st.success("모든 스쿨존이 양호한 상태입니다.")
+        st.success("모든 시설이 양호한 상태입니다.")
+
 
 # ============================
-# 탭3: 동네정보
+# Tab 3: 동네정보
 # ============================
 with tab_district:
     pop_df = load_population()
@@ -769,7 +858,7 @@ with tab_district:
     fig_pop.update_layout(**PLOTLY_LAYOUT, height=900, coloraxis_showscale=False)
     st.plotly_chart(fig_pop, use_container_width=True)
 
-    # 전국 5년 추이
+    # 전국 추이
     fig_trend = go.Figure()
     fig_trend.add_trace(go.Scatter(
         x=nat_df["발생년"], y=nat_df["사고건수"],
@@ -799,16 +888,14 @@ with tab_district:
     )
     st.plotly_chart(fig_trend, use_container_width=True)
 
-    # 등하교 시간대 교통량
+    # 교통량
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     traffic_df = load_traffic()
     if len(traffic_df) > 0:
         traffic_agg = traffic_df.groupby("호선명").agg(
             등교=("등교시간_합계", "mean"),
             하교=("하교시간_합계", "mean"),
-        ).reset_index()
-        traffic_agg = traffic_agg.sort_values("등교", ascending=True)
-
+        ).reset_index().sort_values("등교", ascending=True)
         traffic_melted = traffic_agg.melt(
             id_vars="호선명", value_vars=["등교", "하교"],
             var_name="시간대", value_name="평균교통량",
@@ -823,11 +910,11 @@ with tab_district:
         fig_traffic.update_layout(**PLOTLY_LAYOUT, height=350)
         st.plotly_chart(fig_traffic, use_container_width=True)
 
-    # 구별 안전점수 집계
+    # 구별 안전점수
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     gu_scores = df.groupby("구").agg(
         평균안전점수=("활성_안전점수", "mean"),
-        학교수=("시설명", "count"),
+        시설수=("시설물명", "count"),
     ).reset_index().sort_values("평균안전점수", ascending=True)
 
     fig_gu = px.bar(
@@ -836,21 +923,20 @@ with tab_district:
         labels={"평균안전점수": "평균 안전점수", "구": ""},
         color="평균안전점수",
         color_continuous_scale=[[0, "#E74C3C"], [0.5, "#85C1E9"], [1, "#154360"]],
-        text="학교수",
+        text="시설수",
     )
-    fig_gu.update_traces(texttemplate="%{text}개교", textposition="outside")
+    fig_gu.update_traces(texttemplate="%{text}개소", textposition="outside")
     fig_gu.update_layout(**PLOTLY_LAYOUT, height=300, coloraxis_showscale=False)
     st.plotly_chart(fig_gu, use_container_width=True)
 
 
 # ──────────────────────────────────────────────
-# 7. 푸터
+# 7. Footer
 # ──────────────────────────────────────────────
 st.markdown(
     '<div class="footer-text">'
     "데이터 출처: 공공데이터포털, 도로교통공단, 경기데이터드림, 성남시 &nbsp;|&nbsp; "
-    "안전점수: v11 (11개 피처, 감산41%/가산59%, MinMax 정규화, 5년 사고) &nbsp;|&nbsp; "
-    "상관계수: -0.547"
+    "팀원 데이터 통합: 시언(V6) + 광민(50/30/20) + 경민(가중치)"
     "</div>",
     unsafe_allow_html=True,
 )
