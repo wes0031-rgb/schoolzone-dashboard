@@ -432,7 +432,7 @@ st.sidebar.markdown(
 )
 scoring_mode = st.sidebar.radio(
     "점수 모드",
-    ["시언 V6 안전점수 (142개소)", "광민 100점 안전점수 (60개소)", "가중치 직접 설정"],
+    ["시언 V6 안전점수 (142개소)", "광민 100점 안전점수 (60개소)", "경민 가중치 안전점수 (73개소)", "가중치 직접 설정"],
     label_visibility="collapsed",
 )
 
@@ -450,6 +450,13 @@ elif scoring_mode == "광민 100점 안전점수 (60개소)":
     df["안전등급"] = df["등급_광민"].map(GRADE_LABELS)
     score_label = "100점 안전점수"
     popup_fn = make_popup_gm
+elif scoring_mode == "경민 가중치 안전점수 (73개소)":
+    df = df[df["경민_안전점수"].notna()].copy()
+    df["활성_안전점수"] = df["경민_안전점수"]
+    df["등급"] = df["경민_등급"]
+    df["안전등급"] = df["경민_등급"].map(GRADE_LABELS)
+    score_label = "경민 가중치 점수"
+    popup_fn = make_popup_custom
 else:
     # 가중치 직접 설정 모드
     st.sidebar.markdown(
