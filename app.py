@@ -480,13 +480,6 @@ if len(_prob_valid) > 0:
 
 df["_시설합계"] = df[FACILITY_COLS].sum(axis=1)
 
-st.sidebar.markdown(
-    "<h2 style='text-align:center;margin-bottom:0;'>스쿨존 안전 분석</h2>"
-    "<p style='text-align:center;opacity:0.6;font-size:13px;'>성남시 어린이 보호구역</p>",
-    unsafe_allow_html=True,
-)
-st.sidebar.markdown("---")
-
 # ── 안전점수 설정 ──
 df["활성_안전점수"] = df["최종안전점수_V6"]
 df["등급"] = df["등급_V6"]
@@ -495,6 +488,13 @@ df["안전등급"] = df["등급_V6"].map(GRADE_LABELS)
 # ── 개별 시설 선택 (최상단) ──
 school_list = ["(전체)"] + sorted(df["시설물명"].tolist())
 selected_school = st.sidebar.selectbox("개별 시설 선택", school_list)
+st.sidebar.markdown("---")
+
+st.sidebar.markdown(
+    "<h2 style='text-align:center;margin-bottom:0;'>스쿨존 안전 분석</h2>"
+    "<p style='text-align:center;opacity:0.6;font-size:13px;'>성남시 어린이 보호구역</p>",
+    unsafe_allow_html=True,
+)
 st.sidebar.markdown("---")
 
 # ── 시설 유형 필터 ──
@@ -571,6 +571,8 @@ st.markdown("""
     </span>
 </div>
 """, unsafe_allow_html=True)
+
+st.caption("점수는 확률 추정치이며, 보조 의사결정 도구로 사용하도록 권장합니다.")
 
 # KPIs
 k1, k2, k3, k4 = st.columns(4)
