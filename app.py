@@ -967,6 +967,30 @@ with tab_facility:
     fig_gu_fac.update_layout(**PLOTLY_LAYOUT, height=450)
     st.plotly_chart(fig_gu_fac, use_container_width=True)
 
+    # ── (b-2) 구별 등급 분포 파이차트 ──
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+    st.markdown("##### 구별 안전등급 분포")
+    _gu_grade = df.groupby(["구", "등급"]).size().reset_index(name="개소")
+    _gu_list = sorted(df["구"].dropna().unique().tolist())
+    _pie_cols = st.columns(len(_gu_list))
+    for _pi, _gu_name in enumerate(_gu_list):
+        with _pie_cols[_pi]:
+            _gu_sub = _gu_grade[_gu_grade["구"] == _gu_name]
+            fig_pie = px.pie(
+                _gu_sub, values="개소", names="등급",
+                title=f"{_gu_name}",
+                color="등급",
+                color_discrete_map={g: GRADE_COLORS[g] for g in ["A", "B", "C", "D"]},
+                category_orders={"등급": ["A", "B", "C", "D"]},
+            )
+            fig_pie.update_traces(textposition="inside", textinfo="percent+value")
+            fig_pie.update_layout(
+                **PLOTLY_LAYOUT, height=320, showlegend=True,
+                legend=dict(orientation="h", y=-0.1),
+                margin=dict(t=40, b=40, l=10, r=10),
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
     # ── (c) 등급별 시설 보유 현황 (Grouped Bar) ──
@@ -1030,6 +1054,28 @@ with tab_facility:
         f'</span></div>',
         unsafe_allow_html=True,
     )
+
+    # ── (d-2) 시설 간 상관 히트맵 ──
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+    st.markdown("##### 시설 간 상관관계 히트맵")
+    st.caption("9개 시설물 사이의 상관계수 — 어떤 시설이 함께 설치되는 경향이 있는가?")
+
+    _fac_corr = df[FACILITY_COLS].corr()
+    fig_heatmap = go.Figure(data=go.Heatmap(
+        z=_fac_corr.values,
+        x=FACILITY_COLS, y=FACILITY_COLS,
+        colorscale=[[0, "#E74C3C"], [0.5, "#FFFFFF"], [1, "#154360"]],
+        zmin=-1, zmax=1,
+        text=[[f"{v:.2f}" for v in row] for row in _fac_corr.values],
+        texttemplate="%{text}",
+        textfont=dict(size=11),
+    ))
+    fig_heatmap.update_layout(
+        **PLOTLY_LAYOUT, height=500,
+        title="9개 시설물 상관관계 매트릭스",
+        xaxis=dict(tickangle=45),
+    )
+    st.plotly_chart(fig_heatmap, use_container_width=True)
 
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
