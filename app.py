@@ -168,13 +168,8 @@ def load_cv_features():
 
 
 @st.cache_data
-def load_gyosan_schools():
-    return pd.read_csv(DATA_DIR / "교산_교육시설.csv", encoding="utf-8-sig")
-
-
-@st.cache_data
-def load_gyosan_public():
-    return pd.read_csv(DATA_DIR / "교산_공공청사.csv", encoding="utf-8-sig")
+def load_gwangmyung():
+    return pd.read_csv(DATA_DIR / "광명_스쿨존.csv", encoding="utf-8-sig")
 
 
 @st.cache_data
@@ -632,7 +627,7 @@ if len(filtered_df) > 0:
 
 # Tabs
 tab_map, tab_analysis, tab_facility, tab_cv, tab_district, tab_sim, tab_method = st.tabs(
-    ["지도", "상세분석", "시설점수", "도로환경 (CV)", "동네정보", "교산 시뮬레이션", "분석 방법론"]
+    ["지도", "상세분석", "시설점수", "도로환경 (CV)", "동네정보", "광명 시뮬레이션", "분석 방법론"]
 )
 
 # ============================
@@ -1479,20 +1474,19 @@ with tab_district:
 
 
 # ============================
-# Tab 6: 교산 시뮬레이션
+# Tab 6: 광명 시뮬레이션
 # ============================
 with tab_sim:
-    st.markdown("### 교산 신도시 스쿨존 시뮬레이션")
+    st.markdown("### 광명시 스쿨존 시뮬레이션")
     st.caption(
-        "2기 신도시(성남시) 136개소 분석 결과를 학습하여, "
-        "3기 신도시(교산) 계획 학교의 예상 안전점수를 시뮬레이션합니다."
+        "성남시 모델을 광명시 51개소에 적용하여 예상 안전점수·등급을 산출합니다. "
+        "광명시에 없는 시설(도로안전표지, CCTV, 단속카메라)은 0으로 처리됩니다."
     )
 
-    gs_schools = load_gyosan_schools()
-    gs_public = load_gyosan_public()
+    gm_df = load_gwangmyung()
     safety_model, model_features, model_r2 = train_safety_model()
 
-    # 등급 기준선 (V6 사분위수)
+    # 등급 기준선 (성남 V6 사분위수)
     gs_q1, gs_q2, gs_q3 = df["최종안전점수_V6"].quantile([0.25, 0.5, 0.75]).values
 
     def classify_grade(score):
@@ -1504,284 +1498,133 @@ with tab_sim:
             return "C"
         return "D"
 
-    # ── (a) 교산 지도 ──
-    gs_col_map, gs_col_info = st.columns([3, 2])
+    # ── 광명 각 학교별 안전점수 예측 ──
+    gm_pred_rows = []
+    for _, gm_r in gm_df.iterrows():
+        gm_fvals = [int(gm_r.get(f, 0)) for f in FACILITY_COLS]
+        gm_child = float(gm_r.get("어린이비율", 10.0))
+        gm_acc = int(gm_r.get("발생건수", 0))
+        gm_input = dict(zip(model_features, gm_fvals + [gm_acc, gm_child]))
+        gm_score = max(0.0, min(100.0, float(safety_model.predict(pd.DataFrame([gm_input]))[0])))
+        gm_grade = classify_grade(gm_score)
+        gm_pred_rows.append({
+            "시설물명": gm_r["시설물명"], "시설유형": gm_r["시설유형"],
+            "위도": gm_r["위도"], "경도": gm_r["경도"],
+            "예상점수": round(gm_score, 1), "예상등급": gm_grade,
+            "발생건수": gm_acc, "어린이비율": round(gm_child, 1),
+        })
+    gm_result = pd.DataFrame(gm_pred_rows)
 
-    GS_TYPE_STYLE = {
-        "초등학교": ("#1B4F72", 10),
-        "유치원": ("#5DADE2", 6),
-        "중학교": ("#2E86C1", 8),
-        "고등학교": ("#85C1E9", 8),
-        "특수학교": ("#F39C12", 8),
-    }
+    # ── (a) KPI ──
+    gm_k1, gm_k2, gm_k3, gm_k4 = st.columns(4)
+    gm_k1.metric("광명 시설 수", f"{len(gm_result)}개소")
+    gm_k2.metric("평균 예상점수", f"{gm_result['예상점수'].mean():.1f}")
+    gm_safe_pct = (gm_result["예상등급"].isin(["A", "B"])).sum() / len(gm_result) * 100
+    gm_k3.metric("안전(A+B) 비율", f"{gm_safe_pct:.0f}%")
+    gm_k4.metric("모델 R²", f"{model_r2:.3f}")
 
-    with gs_col_map:
-        gs_map = folium.Map(
-            location=[37.515, 127.200], zoom_start=13, tiles="cartodbpositron",
+    # ── (b) 광명 지도 ──
+    GS_GRADE_COLORS = {"A": "#154360", "B": "#2471A3", "C": "#85C1E9", "D": "#E74C3C"}
+    gm_map = folium.Map(
+        location=[gm_df["위도"].mean(), gm_df["경도"].mean()],
+        zoom_start=13, tiles="cartodbpositron",
+    )
+    for _, gm_r in gm_result.iterrows():
+        gm_color = GS_GRADE_COLORS.get(gm_r["예상등급"], "#999")
+        folium.CircleMarker(
+            [gm_r["위도"], gm_r["경도"]],
+            radius=8, color="#fff", weight=2,
+            fill=True, fill_color=gm_color, fill_opacity=0.9,
+            tooltip=f"{gm_r['시설물명']} ({gm_r['시설유형']}) — {gm_r['예상등급']} ({gm_r['예상점수']}점)",
+        ).add_to(gm_map)
+    st_folium(gm_map, height=450, use_container_width=True, returned_objects=[])
+
+    # ── (c) 등급 분포 + 예측 결과 테이블 ──
+    gm_col1, gm_col2 = st.columns(2)
+    with gm_col1:
+        gm_grade_cnt = gm_result["예상등급"].value_counts().reindex(["A", "B", "C", "D"]).fillna(0).astype(int)
+        fig_gm_pie = px.pie(
+            names=gm_grade_cnt.index, values=gm_grade_cnt.values,
+            title="광명시 예상 등급 분포",
+            color=gm_grade_cnt.index,
+            color_discrete_map=GS_GRADE_COLORS,
         )
-        for _, gs_r in gs_schools.iterrows():
-            gs_color, gs_radius = GS_TYPE_STYLE.get(gs_r["시설유형"], ("#999", 6))
-            folium.CircleMarker(
-                [gs_r["위도"], gs_r["경도"]],
-                radius=gs_radius, color="#fff", weight=2,
-                fill=True, fill_color=gs_color, fill_opacity=0.9,
-                tooltip=f"{gs_r['시설물명']} ({gs_r['시설유형']})",
-            ).add_to(gs_map)
+        fig_gm_pie.update_layout(**PLOTLY_LAYOUT, height=350)
+        st.plotly_chart(fig_gm_pie, use_container_width=True)
 
-        if st.checkbox("공공청사 표시", value=False, key="gs_pub_ov"):
-            for _, gs_r in gs_public.iterrows():
-                folium.Marker(
-                    [gs_r["위도"], gs_r["경도"]],
-                    icon=folium.Icon(color="gray", icon="building", prefix="fa"),
-                    tooltip=gs_r["시설물명"],
-                ).add_to(gs_map)
-
-        st_folium(gs_map, height=450, use_container_width=True, returned_objects=[])
-
-    with gs_col_info:
-        st.markdown("##### 계획 교육시설")
-        gs_type_counts = gs_schools["시설유형"].value_counts()
-        for gs_t, gs_n in gs_type_counts.items():
-            gs_tc, _ = GS_TYPE_STYLE.get(gs_t, ("#999", 6))
-            st.markdown(
-                f'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;'
-                f'background:{gs_tc};margin-right:6px;vertical-align:middle;"></span>'
-                f'{gs_t}: **{gs_n}**개',
-                unsafe_allow_html=True,
-            )
-        st.markdown(f"합계: **{len(gs_schools)}**개소")
-        st.markdown(f"<br>안전점수 모델 R² = **{model_r2:.3f}**", unsafe_allow_html=True)
-        st.markdown(f"사고확률 모델 AUC = **{integ_auc:.3f}**", unsafe_allow_html=True)
-        st.caption("성남시 136개소 데이터 기반")
+    with gm_col2:
+        st.markdown("##### 예측 결과 (점수 하위순)")
+        gm_display = gm_result.sort_values("예상점수")[
+            ["시설물명", "시설유형", "예상등급", "예상점수", "발생건수"]
+        ].reset_index(drop=True)
+        gm_display.index = gm_display.index + 1
+        st.dataframe(gm_display, use_container_width=True, height=350)
 
     st.markdown("---")
 
-    # ── (b)(c) 시나리오 시뮬레이션 ──
-    st.markdown("##### 시설물 시나리오 시뮬레이션")
+    # ── (d) 성남 대비 비교 ──
+    st.markdown("##### 광명 vs 성남 비교")
+    gs_gavg_score = df.groupby("등급_V6")["최종안전점수_V6"].mean().reindex(["A", "B", "C", "D"])
+    gs_gavg_fac = df.groupby("등급_V6")[FACILITY_COLS].mean().reindex(["A", "B", "C", "D"])
 
-    SIM_SCENARIOS = {
-        "최소 설치 (D등급 평균)": [7, 4, 2, 2, 20, 2, 15, 0, 5],
-        "표준 설치 (전체 평균)": [10, 5, 4, 4, 19, 2, 20, 1, 10],
-        "권장 설치 (A등급 평균)": [13, 8, 6, 6, 20, 2, 30, 2, 15],
-    }
-
-    gs_col_sc, gs_col_ct = st.columns([1, 2])
-
-    with gs_col_sc:
-        gs_scenario = st.radio(
-            "시나리오", list(SIM_SCENARIOS.keys()) + ["직접 설정"], key="gs_radio",
-        )
-
-    with gs_col_ct:
-        if gs_scenario == "직접 설정":
-            gs_sl_cols = st.columns(3)
-            gs_fvals = []
-            for gs_i, gs_f in enumerate(FACILITY_COLS):
-                with gs_sl_cols[gs_i % 3]:
-                    gs_fvals.append(
-                        st.slider(gs_f, 0, int(df[gs_f].max()) + 10,
-                                  int(df[gs_f].mean()), key=f"gs_{gs_f}")
-                    )
-        else:
-            gs_fvals = list(SIM_SCENARIOS[gs_scenario])
-            st.markdown(
-                "**설정 시설물:** "
-                + " / ".join(f"{f}: **{v}**" for f, v in zip(FACILITY_COLS, gs_fvals))
-            )
-
-        gs_child = st.slider(
-            "예상 어린이 비율 (%)", 5.0, 25.0, 15.0, 0.5, key="gs_child",
-        )
-
-    # 안전점수 예측 (LinearRegression)
-    gs_input = dict(zip(
-        model_features,
-        list(gs_fvals) + [0, gs_child],
-    ))
-    gs_X = pd.DataFrame([gs_input])
-    gs_pred = max(0.0, min(100.0, float(safety_model.predict(gs_X)[0])))
-    gs_grade = classify_grade(gs_pred)
-
-    # 사고확률 예측 (LogisticRegression 통합 3-class 모델)
-    gs_sr = df["structure_risk"].median()  # 신도시 → 중앙값 사용
-    gs_integ_input = dict(zip(
-        integ_feats,
-        [gs_sr] + list(gs_fvals) + [gs_child],
-    ))
-    gs_integ_X = pd.DataFrame([gs_integ_input])
-    gs_proba = _integ_model.predict_proba(gs_integ_X)[0]
-    gs_safe_prob = float(gs_proba[0])
-    gs_caution_prob = float(gs_proba[1])
-    gs_danger_prob = float(gs_proba[2])
-
-    st.markdown("---")
-    st.markdown("##### 시뮬레이션 결과")
-
-    _gs_r1c1, _gs_r1c2, _gs_r1c3 = st.columns(3)
-    _gs_r1c1.metric("예상 안전점수", f"{gs_pred:.1f}")
-    _gs_r1c2.metric("예상 등급", GRADE_LABELS[gs_grade])
-    _gs_r1c3.metric("어린이 비율", f"{gs_child:.1f}%")
-    _gs_r2c1, _gs_r2c2, _gs_r2c3 = st.columns(3)
-    _gs_r2c1.metric("안전확률", f"{gs_safe_prob:.1%}")
-    _gs_r2c2.metric("주의확률", f"{gs_caution_prob:.1%}")
-    _gs_r2c3.metric("위험확률", f"{gs_danger_prob:.1%}")
-
-    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
-
-    # ── 시설물 민감도 분석 ──
-    st.markdown("##### 시설물 +1개 효과 분석")
-    st.caption("현재 시나리오에서 각 시설물을 1개 추가했을 때 안전점수·위험확률 변화량")
-
-    gs_sens = []
-    for gs_si, gs_sf in enumerate(FACILITY_COLS):
-        # 안전점수 민감도 (LinearRegression)
-        gs_inp_plus = gs_input.copy()
-        gs_inp_plus[gs_sf] = gs_inp_plus[gs_sf] + 1
-        gs_pred_plus = max(0.0, min(100.0, float(
-            safety_model.predict(pd.DataFrame([gs_inp_plus]))[0]
-        )))
-        # 위험확률 민감도 (LogisticRegression 3-class)
-        gs_int_plus = gs_integ_input.copy()
-        gs_int_plus[gs_sf] = gs_int_plus[gs_sf] + 1
-        gs_risk_plus = float(
-            _integ_model.predict_proba(pd.DataFrame([gs_int_plus]))[0, 2]
-        )
-        gs_sens.append({
-            "시설물": gs_sf,
-            "안전점수 변화": gs_pred_plus - gs_pred,
-            "위험확률 변화(%p)": (gs_risk_plus - gs_danger_prob) * 100,
+    gm_comp_col1, gm_comp_col2 = st.columns(2)
+    with gm_comp_col1:
+        gm_scomp = pd.DataFrame({
+            "구분": ["광명 평균"] + [f"성남 {g}등급" for g in ["A", "B", "C", "D"]],
+            "안전점수": [gm_result["예상점수"].mean()] + gs_gavg_score.tolist(),
         })
-
-    gs_sens_df = pd.DataFrame(gs_sens).sort_values("위험확률 변화(%p)")
-
-    gs_sc1, gs_sc2 = st.columns(2)
-    with gs_sc1:
-        fig_sens_sc = go.Figure()
-        fig_sens_sc.add_trace(go.Bar(
-            y=gs_sens_df["시설물"], x=gs_sens_df["안전점수 변화"],
-            orientation="h",
-            marker_color=[
-                "#27AE60" if v > 0 else "#E74C3C"
-                for v in gs_sens_df["안전점수 변화"]
-            ],
-            text=[f"{v:+.2f}" for v in gs_sens_df["안전점수 변화"]],
-            textposition="outside",
-        ))
-        fig_sens_sc.add_vline(x=0, line_color="#555", line_width=1)
-        fig_sens_sc.update_layout(
-            **PLOTLY_LAYOUT, height=350,
-            title="시설물 +1개 → 안전점수 변화",
-            xaxis=dict(title="안전점수 변화"),
-            yaxis=dict(title=""),
-        )
-        st.plotly_chart(fig_sens_sc, use_container_width=True)
-
-    with gs_sc2:
-        fig_sens_rk = go.Figure()
-        fig_sens_rk.add_trace(go.Bar(
-            y=gs_sens_df["시설물"], x=gs_sens_df["위험확률 변화(%p)"],
-            orientation="h",
-            marker_color=[
-                "#27AE60" if v < 0 else "#E74C3C"
-                for v in gs_sens_df["위험확률 변화(%p)"]
-            ],
-            text=[f"{v:+.2f}%p" for v in gs_sens_df["위험확률 변화(%p)"]],
-            textposition="outside",
-        ))
-        fig_sens_rk.add_vline(x=0, line_color="#555", line_width=1)
-        fig_sens_rk.update_layout(
-            **PLOTLY_LAYOUT, height=350,
-            title="시설물 +1개 → 위험확률 변화",
-            xaxis=dict(title="위험확률 변화 (%p)"),
-            yaxis=dict(title=""),
-        )
-        st.plotly_chart(fig_sens_rk, use_container_width=True)
-
-    # 우선 투자 추천 TOP 3
-    gs_top3_sens = gs_sens_df.head(3)
-    st.markdown(
-        '<div style="background:linear-gradient(135deg,#D4EFDF,#EBF5FB);'
-        'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
-        '<b style="color:#1B4F72;">우선 투자 추천 TOP 3</b>'
-        ' — 위험확률 감소 효과 기준<br>'
-        '<span style="font-size:13px;color:#2C3E50;">'
-        + " / ".join(
-            f'<b>{r["시설물"]}</b> +1 → 점수 {r["안전점수 변화"]:+.1f}'
-            f' · 위험 {r["위험확률 변화(%p)"]:+.1f}%p'
-            for _, r in gs_top3_sens.iterrows()
-        )
-        + '</span></div>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
-
-    # ── (d) 성남시 대비 비교 차트 ──
-    gs_col_c1, gs_col_c2 = st.columns(2)
-
-    gs_gavg_score = (
-        df.groupby("등급_V6")["최종안전점수_V6"].mean().reindex(["A", "B", "C", "D"])
-    )
-    gs_gavg_fac = (
-        df.groupby("등급_V6")[FACILITY_COLS].mean().reindex(["A", "B", "C", "D"])
-    )
-
-    with gs_col_c1:
-        gs_scomp = pd.DataFrame({
-            "구분": ["교산 시뮬레이션"]
-                    + [f"성남시 {g}등급" for g in ["A", "B", "C", "D"]],
-            "안전점수": [gs_pred] + gs_gavg_score.tolist(),
-        })
-        fig_gs_sc = px.bar(
-            gs_scomp, x="구분", y="안전점수",
-            title="예상 안전점수 vs 성남시 등급 평균",
+        fig_gm_sc = px.bar(
+            gm_scomp, x="구분", y="안전점수",
+            title="예상 안전점수: 광명 평균 vs 성남 등급별",
             color="구분",
-            color_discrete_sequence=[
-                "#F39C12", "#154360", "#2471A3", "#85C1E9", "#E74C3C",
-            ],
+            color_discrete_sequence=["#F39C12", "#154360", "#2471A3", "#85C1E9", "#E74C3C"],
             text="안전점수",
         )
-        fig_gs_sc.update_traces(texttemplate="%{text:.1f}", textposition="outside")
-        fig_gs_sc.update_layout(**PLOTLY_LAYOUT, height=380, showlegend=False)
-        st.plotly_chart(fig_gs_sc, use_container_width=True)
+        fig_gm_sc.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+        fig_gm_sc.update_layout(**PLOTLY_LAYOUT, height=380, showlegend=False)
+        st.plotly_chart(fig_gm_sc, use_container_width=True)
 
-    with gs_col_c2:
-        gs_fcomp = []
-        for gs_f, gs_v in zip(FACILITY_COLS, gs_fvals):
-            gs_fcomp.append({"시설물": gs_f, "구분": "교산", "수량": gs_v})
-            gs_fcomp.append({
-                "시설물": gs_f, "구분": "성남 A등급",
-                "수량": round(gs_gavg_fac.loc["A", gs_f], 1),
-            })
-            gs_fcomp.append({
-                "시설물": gs_f, "구분": "성남 D등급",
-                "수량": round(gs_gavg_fac.loc["D", gs_f], 1),
-            })
-        fig_gs_fc = px.bar(
-            pd.DataFrame(gs_fcomp), x="시설물", y="수량",
+    with gm_comp_col2:
+        # 광명 평균 시설물 vs 성남 A/D등급
+        gm_fac_avg = gm_df[FACILITY_COLS].mean()
+        gm_fcomp = []
+        for gs_f in FACILITY_COLS:
+            gm_fcomp.append({"시설물": gs_f, "구분": "광명", "수량": round(float(gm_fac_avg[gs_f]), 1)})
+            gm_fcomp.append({"시설물": gs_f, "구분": "성남 A등급", "수량": round(gs_gavg_fac.loc["A", gs_f], 1)})
+            gm_fcomp.append({"시설물": gs_f, "구분": "성남 D등급", "수량": round(gs_gavg_fac.loc["D", gs_f], 1)})
+        fig_gm_fc = px.bar(
+            pd.DataFrame(gm_fcomp), x="시설물", y="수량",
             color="구분", barmode="group",
-            title="시설물 수량: 교산 vs 성남시 A/D등급",
-            color_discrete_map={
-                "교산": "#F39C12", "성남 A등급": "#154360", "성남 D등급": "#E74C3C",
-            },
+            title="시설물 평균: 광명 vs 성남 A/D등급",
+            color_discrete_map={"광명": "#F39C12", "성남 A등급": "#154360", "성남 D등급": "#E74C3C"},
         )
-        fig_gs_fc.update_layout(**PLOTLY_LAYOUT, height=380)
-        st.plotly_chart(fig_gs_fc, use_container_width=True)
+        fig_gm_fc.update_layout(**PLOTLY_LAYOUT, height=380)
+        st.plotly_chart(fig_gm_fc, use_container_width=True)
 
-    # ── (e) A등급 달성 권장 시설물 테이블 ──
-    st.markdown("##### A등급 달성 권장 시설물")
-    gs_rec = []
-    for gs_f, gs_v in zip(FACILITY_COLS, gs_fvals):
-        gs_aavg = gs_gavg_fac.loc["A", gs_f]
-        gs_gap = gs_aavg - gs_v
-        gs_rec.append({
-            "시설물": gs_f,
-            "현재 설정": gs_v,
-            "A등급 평균": round(gs_aavg, 1),
-            "추가 필요": max(0, int(round(gs_gap))),
-            "상태": "충족" if gs_v >= gs_aavg else "미달",
-        })
-    st.dataframe(pd.DataFrame(gs_rec), use_container_width=True, hide_index=True)
+    # ── (e) D등급 개선 제안 ──
+    gm_d = gm_result[gm_result["예상등급"] == "D"]
+    if len(gm_d) > 0:
+        st.markdown("##### 광명시 D등급 예상 시설 — 우선 개선 대상")
+        for _, gm_r in gm_d.sort_values("예상점수").iterrows():
+            gm_row_data = gm_df[gm_df["시설물명"] == gm_r["시설물명"]].iloc[0]
+            worst, worst_pct = None, 1.0
+            for f in FACILITY_COLS:
+                mx = gm_df[f].max()
+                if mx > 0:
+                    pct = gm_row_data[f] / mx
+                    if pct < worst_pct:
+                        worst_pct, worst = pct, f
+            suggestion = f"{worst} 보강 필요 (현재 {int(gm_row_data[worst])}개)" if worst else "추가 분석 필요"
+            st.markdown(
+                f'<div class="suggestion-card">'
+                f'<span class="school-name">{gm_r["시설물명"]}</span> '
+                f'<span style="font-size:11px;color:#34495E;">({gm_r["시설유형"]})</span> &nbsp; '
+                f'<span style="background:#E74C3C;color:#fff;padding:2px 10px;'
+                f'border-radius:20px;font-size:11px;">D ({gm_r["예상점수"]}점)</span>'
+                f'<div class="suggestion">개선 제안: {suggestion}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ============================
@@ -1938,22 +1781,20 @@ with tab_method:
 
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
-    # ── (e) 교산 시뮬레이션 설명 ──
-    st.markdown("##### 교산 신도시 시뮬레이션 방법")
+    # ── (e) 광명 시뮬레이션 설명 ──
+    st.markdown("##### 광명시 시뮬레이션 방법")
     st.markdown(
         f'<div style="background:#FEF9E7;padding:16px 20px;border-radius:10px;'
         f'border-left:4px solid #F39C12;margin-bottom:16px;">'
         f'<span style="font-size:14px;color:#2C3E50;">'
         f'<b style="color:#F39C12;">안전점수 예측 모델</b><br>'
-        f'성남시 136개소 데이터로 학습한 <b>LinearRegression</b> 모델 (R² = {model_r2:.3f})<br>'
-        f'입력: 9개 시설물 수량 + 발생건수(신도시=0) + 어린이비율<br>'
+        f'성남시 데이터로 학습한 <b>LinearRegression</b> 모델 (R² = {model_r2:.3f})을 '
+        f'광명시 51개소에 적용<br>'
+        f'입력: 9개 시설물 수량 + 발생건수 + 어린이비율<br>'
         f'출력: 예상 안전점수 → 사분위수 기반 등급 부여<br><br>'
-        f'<b style="color:#F39C12;">사고확률 예측 모델</b><br>'
-        f'3단계 통합 모델(LogisticRegression)로 안전/주의/위험 확률 예측<br>'
-        f'입력: 구조위험도(중앙값) + 9개 시설물 + 어린이비율<br>'
-        f'출력: 3-class 확률 (안전 / 주의 / 위험)<br><br>'
-        f'<b style="color:#F39C12;">흐름</b>: 시설물 수량 입력 → 안전점수 + 등급 예측 → '
-        f'사고확률 예측 → 시설물 +1개 민감도 분석 → 우선 투자 시설 TOP 3 추천'
+        f'<b style="color:#F39C12;">참고</b><br>'
+        f'광명시에 없는 시설 데이터(도로안전표지, 생활안전CCTV, 무인교통단속카메라)는 '
+        f'0으로 처리되어 실제보다 낮게 예측될 수 있습니다.'
         f'</span></div>',
         unsafe_allow_html=True,
     )
@@ -1979,8 +1820,8 @@ with tab_method:
         '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">행정동별 연령별 인구 (어린이비율)</td>'
         '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2024</td></tr>'
         '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">성남시</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">교산 신도시 교육시설·공공청사 계획</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2025</td></tr>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">광명시 어린이보호구역 시설물·사고 데이터</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2024</td></tr>'
         '<tr><td style="padding:6px 12px;">카카오맵 로드뷰</td>'
         '<td style="padding:6px 12px;">스쿨존 도로환경 이미지 (CV 분석용)</td>'
         '<td style="padding:6px 12px;">2023~2024</td></tr>'
