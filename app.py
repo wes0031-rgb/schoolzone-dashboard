@@ -46,14 +46,14 @@ div[data-testid="stMetric"] {
     box-shadow: 0 4px 15px rgba(27,79,114,0.25);
 }
 div[data-testid="stMetric"] label {
-    color: rgba(255,255,255,0.75) !important; font-size: 13px !important; font-weight: 400 !important;
+    color: #FFFFFF !important; font-size: 13px !important; font-weight: 500 !important;
 }
 div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
     color: #FFFFFF !important; font-size: 28px !important; font-weight: 700 !important;
 }
 button[data-baseweb="tab"] {
     font-size: 15px !important; font-weight: 500 !important;
-    color: #5DADE2 !important; padding: 10px 24px !important;
+    color: #1A5276 !important; padding: 10px 24px !important;
 }
 button[data-baseweb="tab"][aria-selected="true"] {
     color: #1B4F72 !important; border-bottom: 3px solid #1B4F72 !important;
@@ -64,7 +64,7 @@ div[data-testid="stDataFrame"] {
 }
 section[data-testid="stSidebar"] .stCheckbox label span { font-size: 14px !important; }
 .footer-text {
-    text-align: center; color: #85929E; font-size: 12px; padding: 10px 0 20px 0;
+    text-align: center; color: #566573; font-size: 12px; padding: 10px 0 20px 0;
 }
 .warning-banner {
     background: linear-gradient(135deg, #FDEDEC, #F9EBEA);
@@ -229,7 +229,7 @@ def train_structure_model():
 
 @st.cache_resource
 def train_integrated_model():
-    """3단계: 구조위험 + 시설 + 어린이비율 → 사고 여부 (통합 모델)"""
+    """3단계: 구조위험 + 시설 + 어린이비율 → 사고 등급 (3-class 통합 모델)"""
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import Pipeline as SkPipeline
     from sklearn.preprocessing import StandardScaler
@@ -242,7 +242,9 @@ def train_integrated_model():
     merged["structure_risk"] = merged["structure_risk"].fillna(
         merged["structure_risk"].median()
     )
-    merged["accident_label"] = (merged["발생건수"] > 1).astype(int)
+    merged["accident_label"] = pd.cut(
+        merged["발생건수"], bins=[-0.1, 0, 6, np.inf], labels=[0, 1, 2]
+    ).astype(int)
 
     # 3개 추가 시설은 데이터 미수집 시설을 0으로 처리
     for _fc in ["보호구역표지판", "옐로카펫", "무단횡단방지펜스"]:
@@ -256,16 +258,17 @@ def train_integrated_model():
     model = SkPipeline([
         ("scaler", StandardScaler()),
         ("lr", LogisticRegression(
-            C=0.01, class_weight="balanced", max_iter=1000, random_state=42,
+            C=0.01, class_weight="balanced",
+            solver="lbfgs", max_iter=1000, random_state=42,
         )),
     ])
-    cv_auc = cross_val_score(model, X, y, cv=5, scoring="roc_auc")
+    cv_auc = cross_val_score(model, X, y, cv=5, scoring="roc_auc_ovr_weighted")
     model.fit(X, y)
 
-    # 표준화된 계수 (변수 간 상대 비교용)
+    # 위험(2) 클래스 계수 — class 2 = 7건+ 위험
     coef_df = pd.DataFrame({
         "변수": feat_cols,
-        "계수": model.named_steps["lr"].coef_[0],
+        "계수": model.named_steps["lr"].coef_[2],
     }).sort_values("계수")
 
     return model, feat_cols, float(cv_auc.mean()), coef_df
@@ -284,17 +287,17 @@ def make_popup(row):
     <div style="font-family:'Noto Sans KR',sans-serif;width:260px;padding:4px;">
       <div style="font-size:15px;font-weight:700;color:#1B4F72;margin-bottom:4px;">
         {row['시설물명']}
-        <span style="font-size:11px;color:#85929E;font-weight:400;margin-left:4px;">{row['시설유형']}</span>
+        <span style="font-size:11px;color:#34495E;font-weight:400;margin-left:4px;">{row['시설유형']}</span>
       </div>
       <div style="display:inline-block;background:{color};color:#fff;
            padding:2px 10px;border-radius:20px;font-size:12px;font-weight:500;">
         {grade_label}
       </div>
-      <span style="color:#555;font-size:13px;margin-left:6px;">
+      <span style="color:#2C3E50;font-size:13px;margin-left:6px;">
         {row['활성_안전점수']:.1f}점
       </span>
       <hr style="margin:8px 0;border:none;border-top:1px solid #D6EAF8;">
-      <table style="font-size:11px;color:#555;width:100%;border-collapse:collapse;">
+      <table style="font-size:11px;color:#2C3E50;width:100%;border-collapse:collapse;">
         <tr style="background:#F0F6FC;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#1B4F72;">점수 구조</td></tr>
         <tr><td style="padding:2px 4px;">가산점(시설)</td><td style="text-align:right;font-weight:600;">{row['가산점_시설_V6']:.1f}점</td></tr>
         <tr><td style="padding:2px 4px;">가산점(보너스)</td><td style="text-align:right;font-weight:600;">{int(row['가산점_보너스_V6'])}점</td></tr>
@@ -303,15 +306,15 @@ def make_popup(row):
         <tr style="background:#EBF5FB;"><td style="padding:2px 4px;font-weight:700;color:#1B4F72;">최종 안전점수</td><td style="text-align:right;font-weight:700;color:#1B4F72;">{row['활성_안전점수']:.1f}점</td></tr>
       </table>
       <hr style="margin:6px 0;border:none;border-top:1px solid #D6EAF8;">
-      <table style="font-size:10px;color:#888;width:100%;border-collapse:collapse;">
+      <table style="font-size:10px;color:#444;width:100%;border-collapse:collapse;">
         <tr><td>적색표면 {int(row['도로적색표면'])}</td><td>신호등 {int(row['신호등'])}</td><td>횡단보도 {int(row['횡단보도'])}</td></tr>
         <tr><td>안전표지 {int(row['도로안전표지'])}</td><td>CCTV {int(row['생활안전CCTV'])}</td><td>카메라 {int(row['무인교통단속카메라'])}</td></tr>
         <tr><td>표지판 {int(row.get('보호구역표지판', 0))}</td><td>옐로카펫 {int(row.get('옐로카펫', 0))}</td><td>펜스 {int(row.get('무단횡단방지펜스', 0))}</td></tr>
-        <tr><td>발생건수 {int(row['발생건수'])}</td><td>어린이비율 {row['어린이비율']:.1f}%</td><td>구조위험 {row.get('structure_risk', 0):.0%}</td></tr>
+        <tr><td>발생건수 {int(row['발생건수'])}건 ({"안전" if row["발생건수"] == 0 else "주의" if row["발생건수"] <= 6 else "위험"})</td><td>어린이비율 {row['어린이비율']:.1f}%</td><td>구조위험 {row.get('structure_risk', 0):.0%}</td></tr>
       </table>
       {"" if pd.isna(row.get('CV_도로폭확률')) else f'''
       <hr style="margin:6px 0;border:none;border-top:1px solid #E8DAEF;">
-      <table style="font-size:10px;color:#888;width:100%;border-collapse:collapse;">
+      <table style="font-size:10px;color:#444;width:100%;border-collapse:collapse;">
         <tr style="background:#F5EEF8;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#6C3483;">도로환경 (CV)</td></tr>
         <tr><td style="padding:2px 4px;">넓은도로</td><td style="text-align:right;">{row["CV_도로폭확률"]:.0%}</td></tr>
         <tr><td style="padding:2px 4px;">분리장치</td><td style="text-align:right;">{row["CV_분리장치확률"]:.0%}</td></tr>
@@ -533,7 +536,7 @@ st.markdown("""
     <span style="font-size:36px;font-weight:700;color:#1B4F72;">
         내 아이가 살기 좋은 동네
     </span>
-    <span style="font-size:14px;color:#85929E;margin-left:12px;">
+    <span style="font-size:14px;color:#34495E;margin-left:12px;">
         성남시 어린이 보호구역 142개소 안전 분석 대시보드
     </span>
 </div>
@@ -689,15 +692,15 @@ with tab_analysis:
                 f"<b style='color:#1B4F72;'>{selected_school}</b> &nbsp; "
                 f"<span style='background:{grade_color};color:#fff;padding:2px 10px;"
                 f"border-radius:20px;font-size:12px;'>{grade_label}</span> &nbsp; "
-                f"<span style='color:#555;'>안전점수: <b>{school_row['활성_안전점수']:.1f}</b></span> &nbsp; "
-                f"<span style='color:#555;'>발생건수: <b>{int(school_row['발생건수'])}</b>건</span>"
+                f"<span style='color:#2C3E50;'>안전점수: <b>{school_row['활성_안전점수']:.1f}</b></span> &nbsp; "
+                f"<span style='color:#2C3E50;'>발생건수: <b>{int(school_row['발생건수'])}</b>건</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
                 "<div style='background:#F0F6FC;padding:20px;border-radius:8px;"
-                "text-align:center;color:#5DADE2;margin-top:40px;'>"
+                "text-align:center;color:#1A5276;margin-top:40px;'>"
                 "사이드바에서 개별 시설을 선택하면<br>레이더 차트가 표시됩니다."
                 "</div>",
                 unsafe_allow_html=True,
@@ -776,7 +779,7 @@ with tab_analysis:
             st.markdown(
                 f'<div class="suggestion-card">'
                 f'<span class="school-name">{row["시설물명"]}</span> '
-                f'<span style="font-size:11px;color:#85929E;">({row["시설유형"]})</span> &nbsp; '
+                f'<span style="font-size:11px;color:#34495E;">({row["시설유형"]})</span> &nbsp; '
                 f'<span style="background:{grade_color};color:#fff;padding:2px 10px;'
                 f'border-radius:20px;font-size:11px;">D ({row["활성_안전점수"]:.1f}점)</span>'
                 f'<div class="suggestion">개선 제안: {suggestion}</div>'
@@ -789,7 +792,7 @@ with tab_analysis:
     # ── 정책 시뮬레이션: 시설물 추가 효과 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     st.markdown("##### 정책 시뮬레이션: 시설물 추가 효과")
-    st.caption("선택한 시설에 시설물 1개를 추가할 때 사고 확률 변화량을 예측합니다.")
+    st.caption("선택한 시설에 시설물 1개를 추가할 때 위험(7건+) 확률 변화량을 예측합니다.")
 
     _integ_model_pol, integ_feats_pol, _, _ = train_integrated_model()
 
@@ -798,20 +801,20 @@ with tab_analysis:
         if len(pol_row) > 0:
             pol_row = pol_row.iloc[0]
             pol_base = pol_row[integ_feats_pol].values.reshape(1, -1)
-            pol_base_prob = float(_integ_model_pol.predict_proba(pol_base)[0, 1])
+            pol_base_prob = float(_integ_model_pol.predict_proba(pol_base)[0, 2])
 
             pol_results = []
             for i, feat in enumerate(integ_feats_pol):
                 if feat in FACILITY_COLS:
                     pol_modified = pol_base.copy()
                     pol_modified[0, i] += 1
-                    pol_new_prob = float(_integ_model_pol.predict_proba(pol_modified)[0, 1])
+                    pol_new_prob = float(_integ_model_pol.predict_proba(pol_modified)[0, 2])
                     pol_delta = pol_new_prob - pol_base_prob
                     pol_results.append({
                         "시설물": feat,
                         "현재 수량": int(pol_row[feat]),
-                        "현재 사고확률": pol_base_prob,
-                        "추가 후 사고확률": pol_new_prob,
+                        "현재 위험확률": pol_base_prob,
+                        "추가 후 위험확률": pol_new_prob,
                         "변화량 (%p)": pol_delta,
                     })
 
@@ -823,9 +826,9 @@ with tab_analysis:
                 f'<div style="background:linear-gradient(135deg,#D4EFDF,#EBF5FB);'
                 f'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
                 f'<b style="color:#1B4F72;">{selected_school}</b> — '
-                f'현재 사고확률: <b>{pol_base_prob:.1%}</b><br>'
-                f'<span style="font-size:13px;color:#555;">'
-                f'가장 효과적인 시설 TOP 3: '
+                f'현재 위험확률: <b>{pol_base_prob:.1%}</b><br>'
+                f'<span style="font-size:13px;color:#2C3E50;">'
+                f'위험확률 감소 TOP 3: '
                 + " / ".join(
                     f'<b>{r["시설물"]}</b> +1 → {r["변화량 (%p)"]:+.1%}p'
                     for _, r in top3.iterrows()
@@ -846,8 +849,8 @@ with tab_analysis:
             fig_pol.add_vline(x=0, line_color="#555", line_width=1)
             fig_pol.update_layout(
                 **PLOTLY_LAYOUT, height=350,
-                title=f"{selected_school}: 시설물 +1개 추가 시 사고확률 변화",
-                xaxis=dict(title="사고확률 변화 (%p)"),
+                title=f"{selected_school}: 시설물 +1개 추가 시 위험확률 변화",
+                xaxis=dict(title="위험확률 변화 (%p)"),
                 yaxis=dict(title=""),
             )
             st.plotly_chart(fig_pol, use_container_width=True)
@@ -899,7 +902,7 @@ with tab_cv:
                       annotation_text="무작위 기준선 (0.5)", annotation_position="top left")
     fig_auc.update_layout(
         **PLOTLY_LAYOUT, height=380,
-        title="3단계 모델 성능 비교 (5-Fold CV ROC-AUC)",
+        title="3단계 모델 성능 비교 (5-Fold CV Weighted OVR AUC)",
         yaxis=dict(title="ROC-AUC", range=[0, 1]),
         xaxis=dict(title=""),
     )
@@ -911,8 +914,8 @@ with tab_cv:
         '<b style="color:#1B4F72;">핵심 발견:</b> '
         f'도로 구조만으로는 AUC {struct_auc:.3f}로 제한적이며, '
         '구조 위험도를 시설 데이터에 직접 적용하면 AUC 0.39로 오히려 하락합니다. '
-        f'그러나 <b>구조 + 9개 시설 + 어린이비율</b>을 통합하면 AUC <b>{integ_auc:.3f}</b>으로 '
-        '유의미한 예측력을 확보합니다.'
+        f'그러나 <b>구조 + 9개 시설 + 어린이비율</b>을 통합하면 3-class Weighted AUC <b>{integ_auc:.3f}</b>으로 '
+        '유의미한 예측력을 확보합니다. (라벨: 안전 0건 / 주의 1~6건 / 위험 7건+)'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -935,7 +938,7 @@ with tab_cv:
     fig_coef.add_vline(x=0, line_color="#555", line_width=1)
     fig_coef.update_layout(
         **PLOTLY_LAYOUT, height=420,
-        title="통합 모델 로지스틱 회귀 계수 (양수=위험 증가 / 음수=보호 효과)",
+        title="통합 모델 — 위험(7건+) 예측 변수 계수 (양수=위험 증가 / 음수=보호 효과)",
         xaxis=dict(title="계수"),
         yaxis=dict(title=""),
     )
@@ -950,7 +953,7 @@ with tab_cv:
             '<div style="background:#FDEDEC;padding:12px 16px;border-radius:8px;'
             'border-left:4px solid #E74C3C;">'
             '<b style="color:#C0392B;">위험 증가 (+) 변수</b><br>'
-            '<span style="font-size:13px;color:#555;">'
+            '<span style="font-size:13px;color:#2C3E50;">'
             + "<br>".join(f"{r['변수']}: {r['계수']:+.3f}" for _, r in pos_vars.iterrows())
             + '<br><br>사고가 많은 곳에 사후 설치되는 패턴</span></div>',
             unsafe_allow_html=True,
@@ -960,7 +963,7 @@ with tab_cv:
             '<div style="background:#EBF5FB;padding:12px 16px;border-radius:8px;'
             'border-left:4px solid #2E86C1;">'
             '<b style="color:#1B4F72;">보호 효과 (-) 변수</b><br>'
-            '<span style="font-size:13px;color:#555;">'
+            '<span style="font-size:13px;color:#2C3E50;">'
             + "<br>".join(f"{r['변수']}: {r['계수']:+.3f}" for _, r in neg_vars.iterrows())
             + '<br><br>예방적 시설의 사고 억제 효과</span></div>',
             unsafe_allow_html=True,
@@ -968,26 +971,30 @@ with tab_cv:
 
     st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
-    # ── (c) 시설별 사고 확률 예측 ──
-    st.markdown("##### 시설별 사고 확률 예측 (통합 모델)")
+    # ── (c) 시설별 사고 확률 예측 (3단계) ──
+    st.markdown("##### 시설별 사고 확률 예측 — 3단계 (통합 모델)")
 
     df_for_prob = df.dropna(subset=integ_feats).copy()
     if len(df_for_prob) > 0:
         X_prob = df_for_prob[integ_feats].values
-        df_for_prob["사고확률"] = _integ_model.predict_proba(X_prob)[:, 1]
+        _proba = _integ_model.predict_proba(X_prob)
+        df_for_prob["안전확률"] = _proba[:, 0]
+        df_for_prob["주의확률"] = _proba[:, 1]
+        df_for_prob["위험확률"] = _proba[:, 2]
 
-        prob_display = df_for_prob.nlargest(20, "사고확률")[
-            ["시설물명", "시설유형", "구", "등급", "활성_안전점수",
-             "structure_risk", "발생건수", "사고확률"]
+        prob_display = df_for_prob.nlargest(20, "위험확률")[
+            ["시설물명", "시설유형", "구", "등급",
+             "안전확률", "주의확률", "위험확률", "발생건수"]
         ].copy()
         prob_display.columns = [
-            "시설물명", "시설유형", "구", "등급", "안전점수",
-            "구조위험", "실제 발생건수", "예측 사고확률",
+            "시설물명", "시설유형", "구", "등급",
+            "안전확률", "주의확률", "위험확률", "실제발생건수",
         ]
-        prob_display["구조위험"] = prob_display["구조위험"].map("{:.0%}".format)
-        prob_display["예측 사고확률"] = prob_display["예측 사고확률"].map("{:.1%}".format)
+        prob_display["안전확률"] = prob_display["안전확률"].map("{:.1%}".format)
+        prob_display["주의확률"] = prob_display["주의확률"].map("{:.1%}".format)
+        prob_display["위험확률"] = prob_display["위험확률"].map("{:.1%}".format)
         st.dataframe(prob_display, use_container_width=True, hide_index=True)
-        st.caption(f"사고확률 상위 20개소 (전체 {len(df_for_prob)}개소 분석)")
+        st.caption(f"위험확률 상위 20개소 (전체 {len(df_for_prob)}개소 분석)")
 
     st.markdown("---")
 
@@ -1239,7 +1246,7 @@ with tab_sim:
             )
         st.markdown(f"합계: **{len(gs_schools)}**개소")
         st.markdown(f"<br>안전점수 모델 R² = **{model_r2:.3f}**", unsafe_allow_html=True)
-        st.markdown(f"사고확률 모델 AUC = **{integ_auc_sim:.3f}**", unsafe_allow_html=True)
+        st.markdown(f"사고확률 모델 AUC = **{integ_auc:.3f}**", unsafe_allow_html=True)
         st.caption("성남시 142개소 데이터 기반")
 
     st.markdown("---")
@@ -1290,25 +1297,116 @@ with tab_sim:
     gs_pred = max(0.0, min(100.0, float(safety_model.predict(gs_X)[0])))
     gs_grade = classify_grade(gs_pred)
 
-    # 사고확률 예측 (LogisticRegression 통합 모델)
-    _integ_model_sim, integ_feats_sim, integ_auc_sim, _ = train_integrated_model()
+    # 사고확률 예측 (LogisticRegression 통합 3-class 모델)
     gs_sr = df["structure_risk"].median()  # 신도시 → 중앙값 사용
     gs_integ_input = dict(zip(
-        integ_feats_sim,
+        integ_feats,
         [gs_sr] + list(gs_fvals) + [gs_child],
     ))
     gs_integ_X = pd.DataFrame([gs_integ_input])
-    gs_accident_prob = float(_integ_model_sim.predict_proba(gs_integ_X)[0, 1])
+    gs_proba = _integ_model.predict_proba(gs_integ_X)[0]
+    gs_safe_prob = float(gs_proba[0])
+    gs_caution_prob = float(gs_proba[1])
+    gs_danger_prob = float(gs_proba[2])
 
     st.markdown("---")
     st.markdown("##### 시뮬레이션 결과")
 
-    gs_k1, gs_k2, gs_k3, gs_k4, gs_k5 = st.columns(5)
+    gs_k1, gs_k2, gs_k3, gs_k4, gs_k5, gs_k6 = st.columns(6)
     gs_k1.metric("예상 안전점수", f"{gs_pred:.1f}")
     gs_k2.metric("예상 등급", GRADE_LABELS[gs_grade])
-    gs_k3.metric("사고 확률", f"{gs_accident_prob:.1%}")
-    gs_k4.metric("사고이력", "0건 (신도시)")
-    gs_k5.metric("어린이 비율", f"{gs_child:.1f}%")
+    gs_k3.metric("안전확률", f"{gs_safe_prob:.1%}")
+    gs_k4.metric("주의확률", f"{gs_caution_prob:.1%}")
+    gs_k5.metric("위험확률", f"{gs_danger_prob:.1%}")
+    gs_k6.metric("어린이 비율", f"{gs_child:.1f}%")
+
+    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+
+    # ── 시설물 민감도 분석 ──
+    st.markdown("##### 시설물 +1개 효과 분석")
+    st.caption("현재 시나리오에서 각 시설물을 1개 추가했을 때 안전점수·위험확률 변화량")
+
+    gs_sens = []
+    for gs_si, gs_sf in enumerate(FACILITY_COLS):
+        # 안전점수 민감도 (LinearRegression)
+        gs_inp_plus = gs_input.copy()
+        gs_inp_plus[gs_sf] = gs_inp_plus[gs_sf] + 1
+        gs_pred_plus = max(0.0, min(100.0, float(
+            safety_model.predict(pd.DataFrame([gs_inp_plus]))[0]
+        )))
+        # 위험확률 민감도 (LogisticRegression 3-class)
+        gs_int_plus = gs_integ_input.copy()
+        gs_int_plus[gs_sf] = gs_int_plus[gs_sf] + 1
+        gs_risk_plus = float(
+            _integ_model.predict_proba(pd.DataFrame([gs_int_plus]))[0, 2]
+        )
+        gs_sens.append({
+            "시설물": gs_sf,
+            "안전점수 변화": gs_pred_plus - gs_pred,
+            "위험확률 변화(%p)": (gs_risk_plus - gs_danger_prob) * 100,
+        })
+
+    gs_sens_df = pd.DataFrame(gs_sens).sort_values("위험확률 변화(%p)")
+
+    gs_sc1, gs_sc2 = st.columns(2)
+    with gs_sc1:
+        fig_sens_sc = go.Figure()
+        fig_sens_sc.add_trace(go.Bar(
+            y=gs_sens_df["시설물"], x=gs_sens_df["안전점수 변화"],
+            orientation="h",
+            marker_color=[
+                "#27AE60" if v > 0 else "#E74C3C"
+                for v in gs_sens_df["안전점수 변화"]
+            ],
+            text=[f"{v:+.2f}" for v in gs_sens_df["안전점수 변화"]],
+            textposition="outside",
+        ))
+        fig_sens_sc.add_vline(x=0, line_color="#555", line_width=1)
+        fig_sens_sc.update_layout(
+            **PLOTLY_LAYOUT, height=350,
+            title="시설물 +1개 → 안전점수 변화",
+            xaxis=dict(title="안전점수 변화"),
+            yaxis=dict(title=""),
+        )
+        st.plotly_chart(fig_sens_sc, use_container_width=True)
+
+    with gs_sc2:
+        fig_sens_rk = go.Figure()
+        fig_sens_rk.add_trace(go.Bar(
+            y=gs_sens_df["시설물"], x=gs_sens_df["위험확률 변화(%p)"],
+            orientation="h",
+            marker_color=[
+                "#27AE60" if v < 0 else "#E74C3C"
+                for v in gs_sens_df["위험확률 변화(%p)"]
+            ],
+            text=[f"{v:+.2f}%p" for v in gs_sens_df["위험확률 변화(%p)"]],
+            textposition="outside",
+        ))
+        fig_sens_rk.add_vline(x=0, line_color="#555", line_width=1)
+        fig_sens_rk.update_layout(
+            **PLOTLY_LAYOUT, height=350,
+            title="시설물 +1개 → 위험확률 변화",
+            xaxis=dict(title="위험확률 변화 (%p)"),
+            yaxis=dict(title=""),
+        )
+        st.plotly_chart(fig_sens_rk, use_container_width=True)
+
+    # 우선 투자 추천 TOP 3
+    gs_top3_sens = gs_sens_df.head(3)
+    st.markdown(
+        '<div style="background:linear-gradient(135deg,#D4EFDF,#EBF5FB);'
+        'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
+        '<b style="color:#1B4F72;">우선 투자 추천 TOP 3</b>'
+        ' — 위험확률 감소 효과 기준<br>'
+        '<span style="font-size:13px;color:#2C3E50;">'
+        + " / ".join(
+            f'<b>{r["시설물"]}</b> +1 → 점수 {r["안전점수 변화"]:+.1f}'
+            f' · 위험 {r["위험확률 변화(%p)"]:+.1f}%p'
+            for _, r in gs_top3_sens.iterrows()
+        )
+        + '</span></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
