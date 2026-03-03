@@ -629,19 +629,6 @@ if len(filtered_df) > 0:
         unsafe_allow_html=True,
     )
 
-# D등급 경고 배너
-d_grade = filtered_df[filtered_df["등급"] == "D"]
-if len(d_grade) > 0:
-    names = " / ".join(d_grade["시설물명"].tolist()[:10])
-    extra = f" 외 {len(d_grade)-10}개" if len(d_grade) > 10 else ""
-    st.markdown(
-        f'<div class="warning-banner">'
-        f'<b>주의 필요 {len(d_grade)}개소</b> &nbsp; '
-        f'<span>{names}{extra}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
 # Tabs
 tab_map, tab_analysis, tab_facility, tab_cv, tab_district, tab_sim, tab_method = st.tabs(
     ["지도", "상세분석", "시설점수", "도로환경 (CV)", "동네정보", "교산 시뮬레이션", "분석 방법론"]
@@ -651,12 +638,6 @@ tab_map, tab_analysis, tab_facility, tab_cv, tab_district, tab_sim, tab_method =
 # Tab 1: 지도
 # ============================
 with tab_map:
-    pop_df = load_population()
-    geo = load_geojson()
-    m = create_map(filtered_df, overlay_flags, pop_df, geo, selected_school)
-    st_folium(m, height=550, use_container_width=True, returned_objects=[])
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     col_top, col_bot = st.columns(2)
 
     top5 = (
@@ -682,6 +663,25 @@ with tab_map:
     with col_bot:
         st.markdown("##### 안전점수 하위 5")
         st.dataframe(bot5, use_container_width=True)
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+    pop_df = load_population()
+    geo = load_geojson()
+    m = create_map(filtered_df, overlay_flags, pop_df, geo, selected_school)
+    st_folium(m, height=550, use_container_width=True, returned_objects=[])
+
+    # D등급 경고 배너
+    d_grade = filtered_df[filtered_df["등급"] == "D"]
+    if len(d_grade) > 0:
+        names = " / ".join(d_grade["시설물명"].tolist()[:10])
+        extra = f" 외 {len(d_grade)-10}개" if len(d_grade) > 10 else ""
+        st.markdown(
+            f'<div class="warning-banner">'
+            f'<b>주의 필요 {len(d_grade)}개소</b> &nbsp; '
+            f'<span>{names}{extra}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 # ============================
 # Tab 2: 상세분석
