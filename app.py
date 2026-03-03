@@ -1501,9 +1501,9 @@ with tab_sim:
     # ── 광명 각 학교별 안전점수 예측 ──
     gm_pred_rows = []
     for _, gm_r in gm_df.iterrows():
-        gm_fvals = [int(gm_r.get(f, 0)) for f in FACILITY_COLS]
-        gm_child = float(gm_r.get("어린이비율", 10.0))
-        gm_acc = int(gm_r.get("발생건수", 0))
+        gm_fvals = [int(gm_r[f]) if pd.notna(gm_r.get(f)) else 0 for f in FACILITY_COLS]
+        gm_child = float(gm_r["어린이비율"]) if pd.notna(gm_r.get("어린이비율")) else 10.0
+        gm_acc = int(gm_r["발생건수"]) if pd.notna(gm_r.get("발생건수")) else 0
         gm_input = dict(zip(model_features, gm_fvals + [gm_acc, gm_child]))
         gm_score = max(0.0, min(100.0, float(safety_model.predict(pd.DataFrame([gm_input]))[0])))
         gm_grade = classify_grade(gm_score)
