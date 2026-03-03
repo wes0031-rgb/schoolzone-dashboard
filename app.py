@@ -492,6 +492,11 @@ df["활성_안전점수"] = df["최종안전점수_V6"]
 df["등급"] = df["등급_V6"]
 df["안전등급"] = df["등급_V6"].map(GRADE_LABELS)
 
+# ── 개별 시설 선택 (최상단) ──
+school_list = ["(전체)"] + sorted(df["시설물명"].tolist())
+selected_school = st.sidebar.selectbox("개별 시설 선택", school_list)
+st.sidebar.markdown("---")
+
 # ── 시설 유형 필터 ──
 available_types = sorted(df["시설유형"].dropna().unique().tolist())
 selected_types = st.sidebar.multiselect("시설 유형", options=available_types, default=available_types)
@@ -518,10 +523,6 @@ overlay_flags = {
     "지킴이집": ov_guardhouse, "사고다발지": ov_accident,
     "CCTV": ov_cctv, "카메라": ov_camera, "표지판": ov_sign,
 }
-
-st.sidebar.markdown("---")
-school_list = ["(전체)"] + sorted(df["시설물명"].tolist())
-selected_school = st.sidebar.selectbox("개별 시설 선택", school_list)
 
 # CSV 다운로드
 st.sidebar.markdown("---")
