@@ -9,6 +9,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import folium
+from folium.plugins import FastMarkerCluster
 from streamlit_folium import st_folium
 import plotly.express as px
 import plotly.graph_objects as go
@@ -410,34 +411,37 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
                 ).add_to(m)
 
     if overlay_flags.get("CCTV"):
-        cctv = load_cctv()
-        for _, r in cctv.iterrows():
-            if pd.notna(r["위도"]) and pd.notna(r["경도"]):
-                folium.CircleMarker(
-                    [r["위도"], r["경도"]],
-                    radius=3, color="#8E44AD", fill=True,
-                    fill_color="#8E44AD", fill_opacity=0.4, tooltip="CCTV",
-                ).add_to(m)
+        _cctv = load_cctv().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_cctv[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:3, color:'#8E44AD', fillColor:'#8E44AD', fill:true, fillOpacity:0.4});
+                m.bindTooltip('CCTV'); return m;
+            }""",
+        ).add_to(m)
 
     if overlay_flags.get("카메라"):
-        cam = load_cameras()
-        for _, r in cam.iterrows():
-            if pd.notna(r["위도"]) and pd.notna(r["경도"]):
-                folium.CircleMarker(
-                    [r["위도"], r["경도"]],
-                    radius=3, color="#2980B9", fill=True,
-                    fill_color="#2980B9", fill_opacity=0.4, tooltip="단속카메라",
-                ).add_to(m)
+        _cam = load_cameras().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_cam[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:3, color:'#2980B9', fillColor:'#2980B9', fill:true, fillOpacity:0.4});
+                m.bindTooltip('단속카메라'); return m;
+            }""",
+        ).add_to(m)
 
     if overlay_flags.get("표지판"):
-        signs = load_signs()
-        for _, r in signs.iterrows():
-            if pd.notna(r["위도"]) and pd.notna(r["경도"]):
-                folium.CircleMarker(
-                    [r["위도"], r["경도"]],
-                    radius=2, color="#F39C12", fill=True,
-                    fill_color="#F39C12", fill_opacity=0.3, tooltip="안전표지",
-                ).add_to(m)
+        _signs = load_signs().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_signs[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:2, color:'#F39C12', fillColor:'#F39C12', fill:true, fillOpacity:0.3});
+                m.bindTooltip('안전표지'); return m;
+            }""",
+        ).add_to(m)
 
     m.get_root().html.add_child(folium.Element(create_legend_html()))
     return m
@@ -473,6 +477,8 @@ if len(_prob_valid) > 0:
     df.loc[_prob_valid.index, "안전확률"] = _prob_all[:, 0]
     df.loc[_prob_valid.index, "주의확률"] = _prob_all[:, 1]
     df.loc[_prob_valid.index, "위험확률"] = _prob_all[:, 2]
+
+df["_시설합계"] = df[FACILITY_COLS].sum(axis=1)
 
 st.sidebar.markdown(
     "<h2 style='text-align:center;margin-bottom:0;'>스쿨존 안전 분석</h2>"
@@ -548,6 +554,10 @@ filtered_df = df[
     & df["구"].isin(selected_gu)
     & df["안전등급"].isin(selected_grades)
 ]
+
+if len(filtered_df) == 0:
+    st.warning("선택한 필터 조건에 해당하는 시설이 없습니다. 사이드바에서 필터를 조정해 주세요.")
+    st.stop()
 
 # Header
 st.markdown("""
@@ -681,9 +691,9 @@ with tab_analysis:
     score_struct = pd.DataFrame({
         "항목": ["가산점(시설)", "가산점(보너스)", "감산점 합계"],
         "평균": [
-            df["가산점_시설_V6"].mean(),
-            df["가산점_보너스_V6"].mean(),
-            -df["감산점_합계_V6"].mean(),
+            filtered_df["가산점_시설_V6"].mean(),
+            filtered_df["가산점_보너스_V6"].mean(),
+            -filtered_df["감산점_합계_V6"].mean(),
         ],
     })
     fig_struct = px.bar(
@@ -705,7 +715,7 @@ with tab_analysis:
 
     with col_hist:
         fig_hist = px.histogram(
-            df, x="활성_안전점수", nbins=20,
+            filtered_df, x="활성_안전점수", nbins=20,
             title="안전점수 분포",
             labels={"활성_안전점수": "안전점수"},
             color_discrete_sequence=["#2E86C1"],
@@ -772,7 +782,7 @@ with tab_analysis:
     # ── 등급별 현황 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     st.markdown("##### 등급별 현황")
-    grade_stats = df.groupby("등급").agg(
+    grade_stats = filtered_df.groupby("등급").agg(
         시설수=("시설물명", "count"),
         평균_발생건수=("발생건수", "mean"),
         평균_안전점수=("활성_안전점수", "mean"),
@@ -800,7 +810,7 @@ with tab_analysis:
     # ── 시설유형별 현황 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     st.markdown("##### 시설유형별 안전점수")
-    type_stats = df.groupby("시설유형").agg(
+    type_stats = filtered_df.groupby("시설유형").agg(
         시설수=("시설물명", "count"),
         평균점수=("활성_안전점수", "mean"),
         평균_발생건수=("발생건수", "mean"),
@@ -824,7 +834,7 @@ with tab_analysis:
     # ── D등급 개선 제안 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     st.markdown("##### 주의 필요 시설 (D등급)")
-    low_facilities = df[df["등급"] == "D"].sort_values("활성_안전점수")
+    low_facilities = filtered_df[filtered_df["등급"] == "D"].sort_values("활성_안전점수")
     if len(low_facilities) > 0:
         for _, row in low_facilities.iterrows():
             grade_color = GRADE_COLORS["D"]
@@ -1031,7 +1041,6 @@ with tab_facility:
     st.markdown("##### 시설 수 vs 사고 관계")
     st.caption("9개 시설 합계와 발생건수의 관계 — 시설이 많을수록 사고가 줄어드는가?")
 
-    df["_시설합계"] = df[FACILITY_COLS].sum(axis=1)
     fig_scatter = px.scatter(
         df, x="_시설합계", y="발생건수",
         color="등급", size="사고심각도" if "사고심각도" in df.columns else None,
@@ -1169,8 +1178,6 @@ with tab_facility:
             unsafe_allow_html=True,
         )
 
-    # 임시 컬럼 제거
-    df.drop(columns=["_시설합계"], inplace=True, errors="ignore")
 
 
 # ============================
@@ -1187,6 +1194,12 @@ with tab_cv:
     _struct_model, struct_auc, _fac_risk_cv = train_structure_model()
     # _integ_model, integ_feats, integ_auc, integ_coef — 전역에서 이미 학습됨
 
+    # 2단계 외부검증 AUC: 구조위험도만으로 사고 여부 예측
+    from sklearn.metrics import roc_auc_score as _roc_auc
+    _ext_valid = df.dropna(subset=["structure_risk", "발생건수"])
+    _ext_y = (_ext_valid["발생건수"] > 0).astype(int)
+    extern_auc = float(_roc_auc(_ext_y, _ext_valid["structure_risk"])) if len(_ext_y.unique()) > 1 else 0.5
+
     # ── (a) 3단계 모델 AUC 비교 차트 ──
     st.markdown("##### 3단계 모델 AUC 비교")
     auc_data = pd.DataFrame({
@@ -1195,7 +1208,7 @@ with tab_cv:
             "2단계\n외부검증 (구조→시설데이터)",
             "3단계\n통합 (구조+시설+노출)",
         ],
-        "AUC": [struct_auc, 0.39, integ_auc],
+        "AUC": [struct_auc, extern_auc, integ_auc],
         "색상": ["#F39C12", "#E74C3C", "#27AE60"],
     })
     fig_auc = go.Figure()
@@ -1220,7 +1233,7 @@ with tab_cv:
         'border-radius:10px;border-left:4px solid #27AE60;margin-bottom:16px;">'
         '<b style="color:#1B4F72;">핵심 발견:</b> '
         f'도로 구조만으로는 AUC {struct_auc:.3f}로 제한적이며, '
-        '구조 위험도를 시설 데이터에 직접 적용하면 AUC 0.39로 오히려 하락합니다. '
+        f'구조 위험도를 시설 데이터에 직접 적용하면 AUC {extern_auc:.3f}로 오히려 하락합니다. '
         f'그러나 <b>구조 + 9개 시설 + 어린이비율</b>을 통합하면 3-class Weighted AUC <b>{integ_auc:.3f}</b>으로 '
         '유의미한 예측력을 확보합니다. (라벨: 안전 0건 / 주의 1~6건 / 위험 7건+)'
         '</div>',
@@ -1384,7 +1397,7 @@ with tab_cv:
 
 
 # ============================
-# Tab 4: 동네정보
+# Tab 5: 동네정보
 # ============================
 with tab_district:
     pop_df = load_population()
@@ -1475,7 +1488,7 @@ with tab_district:
 
 
 # ============================
-# Tab 4: 교산 시뮬레이션
+# Tab 6: 교산 시뮬레이션
 # ============================
 with tab_sim:
     st.markdown("### 교산 신도시 스쿨존 시뮬레이션")
@@ -1613,13 +1626,14 @@ with tab_sim:
     st.markdown("---")
     st.markdown("##### 시뮬레이션 결과")
 
-    gs_k1, gs_k2, gs_k3, gs_k4, gs_k5, gs_k6 = st.columns(6)
-    gs_k1.metric("예상 안전점수", f"{gs_pred:.1f}")
-    gs_k2.metric("예상 등급", GRADE_LABELS[gs_grade])
-    gs_k3.metric("안전확률", f"{gs_safe_prob:.1%}")
-    gs_k4.metric("주의확률", f"{gs_caution_prob:.1%}")
-    gs_k5.metric("위험확률", f"{gs_danger_prob:.1%}")
-    gs_k6.metric("어린이 비율", f"{gs_child:.1f}%")
+    _gs_r1c1, _gs_r1c2, _gs_r1c3 = st.columns(3)
+    _gs_r1c1.metric("예상 안전점수", f"{gs_pred:.1f}")
+    _gs_r1c2.metric("예상 등급", GRADE_LABELS[gs_grade])
+    _gs_r1c3.metric("어린이 비율", f"{gs_child:.1f}%")
+    _gs_r2c1, _gs_r2c2, _gs_r2c3 = st.columns(3)
+    _gs_r2c1.metric("안전확률", f"{gs_safe_prob:.1%}")
+    _gs_r2c2.metric("주의확률", f"{gs_caution_prob:.1%}")
+    _gs_r2c3.metric("위험확률", f"{gs_danger_prob:.1%}")
 
     st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
@@ -1925,7 +1939,7 @@ with tab_method:
             f'border-left:4px solid #27AE60;">'
             f'<b style="color:#1B4F72;">모델 성능</b><br>'
             f'<span style="font-size:13px;color:#2C3E50;">'
-            f'1단계 구조 모델 AUC: <b>{integ_auc:.3f}</b> 수준의 통합 모델<br>'
+            f'1단계 구조 모델 AUC: <b>{struct_auc:.3f}</b><br>'
             f'3단계 통합 모델 Weighted OVR AUC: <b>{integ_auc:.3f}</b><br>'
             f'5-Fold Cross Validation 기반'
             f'</span></div>',
