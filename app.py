@@ -1,6 +1,6 @@
 """
 스쿨존 안전 분석 대시보드 — 내 아이가 살기 좋은 동네
-성남시 어린이 보호구역 142개소 안전등급 시각화
+성남시 어린이 보호구역 136개소 안전등급 시각화
 
 실행: streamlit run app.py
 """
@@ -566,23 +566,10 @@ st.markdown("""
         내 아이가 살기 좋은 동네
     </span>
     <span style="font-size:14px;color:#34495E;margin-left:12px;">
-        성남시 어린이 보호구역 142개소 안전 분석 대시보드
+        성남시 어린이 보호구역 136개소 안전 분석 대시보드
     </span>
 </div>
 """, unsafe_allow_html=True)
-
-# D등급 경고 배너
-d_grade = filtered_df[filtered_df["등급"] == "D"]
-if len(d_grade) > 0:
-    names = " / ".join(d_grade["시설물명"].tolist()[:10])
-    extra = f" 외 {len(d_grade)-10}개" if len(d_grade) > 10 else ""
-    st.markdown(
-        f'<div class="warning-banner">'
-        f'<b>주의 필요 {len(d_grade)}개소</b> &nbsp; '
-        f'<span>{names}{extra}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
 
 # KPIs
 k1, k2, k3, k4 = st.columns(4)
@@ -638,6 +625,19 @@ if len(filtered_df) > 0:
         f'<span style="font-size:13px;color:#2C3E50;">'
         f'1. {_ins1}<br>2. {_ins2}<br>3. {_ins3}'
         f'</span></div>',
+        unsafe_allow_html=True,
+    )
+
+# D등급 경고 배너
+d_grade = filtered_df[filtered_df["등급"] == "D"]
+if len(d_grade) > 0:
+    names = " / ".join(d_grade["시설물명"].tolist()[:10])
+    extra = f" 외 {len(d_grade)-10}개" if len(d_grade) > 10 else ""
+    st.markdown(
+        f'<div class="warning-banner">'
+        f'<b>주의 필요 {len(d_grade)}개소</b> &nbsp; '
+        f'<span>{names}{extra}</span>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -933,7 +933,7 @@ with _sub_indiv:
 # ============================
 with tab_facility:
     st.markdown("### 시설물 보유 현황 및 분석")
-    st.caption("142개소 스쿨존의 9개 안전 시설물 보유 현황과 사고 관계를 분석합니다.")
+    st.caption("136개소 스쿨존의 9개 안전 시설물 보유 현황과 사고 관계를 분석합니다.")
 
     # ── (a) 시설 보유 현황 KPI ──
     _fac_totals = df[FACILITY_COLS].sum()
@@ -1482,7 +1482,7 @@ with tab_district:
 with tab_sim:
     st.markdown("### 교산 신도시 스쿨존 시뮬레이션")
     st.caption(
-        "2기 신도시(성남시) 142개소 분석 결과를 학습하여, "
+        "2기 신도시(성남시) 136개소 분석 결과를 학습하여, "
         "3기 신도시(교산) 계획 학교의 예상 안전점수를 시뮬레이션합니다."
     )
 
@@ -1550,7 +1550,7 @@ with tab_sim:
         st.markdown(f"합계: **{len(gs_schools)}**개소")
         st.markdown(f"<br>안전점수 모델 R² = **{model_r2:.3f}**", unsafe_allow_html=True)
         st.markdown(f"사고확률 모델 AUC = **{integ_auc:.3f}**", unsafe_allow_html=True)
-        st.caption("성남시 142개소 데이터 기반")
+        st.caption("성남시 136개소 데이터 기반")
 
     st.markdown("---")
 
@@ -1795,10 +1795,9 @@ with tab_method:
         '<div style="background:#F0F6FC;padding:16px 20px;border-radius:10px;'
         'border-left:4px solid #1B4F72;margin-bottom:16px;">'
         '<span style="font-size:14px;color:#2C3E50;">'
-        '<b style="color:#1B4F72;">목표:</b> 성남시 어린이 보호구역(스쿨존) 142개소의 '
+        '<b style="color:#1B4F72;">목표:</b> 성남시 어린이 보호구역(스쿨존) 136개소의 '
         '안전등급을 데이터 기반으로 분석하여, 시설물 투자 우선순위를 제공합니다.<br><br>'
-        '<b style="color:#1B4F72;">분석 대상:</b> 성남시 142개소 '
-        '(수정구 41 / 중원구 26 / 분당구 75)<br>'
+        '<b style="color:#1B4F72;">분석 대상:</b> 성남시·광명시 136개소<br>'
         '<b style="color:#1B4F72;">분석 기간:</b> 2018~2023년 사고 데이터 + 2024년 시설 현황<br>'
         '<b style="color:#1B4F72;">핵심 메시지:</b> 스쿨존 사고는 <b>도로 구조 + 정책(시설) + 노출(어린이)</b>의 결합 결과이며, '
         '시설물 투입이 사고 예방의 핵심이다.'
@@ -1944,7 +1943,7 @@ with tab_method:
         f'border-left:4px solid #F39C12;margin-bottom:16px;">'
         f'<span style="font-size:14px;color:#2C3E50;">'
         f'<b style="color:#F39C12;">안전점수 예측 모델</b><br>'
-        f'성남시 142개소 데이터로 학습한 <b>LinearRegression</b> 모델 (R² = {model_r2:.3f})<br>'
+        f'성남시 136개소 데이터로 학습한 <b>LinearRegression</b> 모델 (R² = {model_r2:.3f})<br>'
         f'입력: 9개 시설물 수량 + 발생건수(신도시=0) + 어린이비율<br>'
         f'출력: 예상 안전점수 → 사분위수 기반 등급 부여<br><br>'
         f'<b style="color:#F39C12;">사고확률 예측 모델</b><br>'
