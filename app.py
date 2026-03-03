@@ -632,7 +632,9 @@ if len(filtered_df) > 0:
     )
 
 # Tabs
-tab_map, tab_analysis, tab_cv, tab_district, tab_sim = st.tabs(["지도", "상세분석", "도로환경 (CV)", "동네정보", "교산 시뮬레이션"])
+tab_map, tab_analysis, tab_facility, tab_cv, tab_district, tab_sim, tab_method = st.tabs(
+    ["지도", "상세분석", "시설점수", "도로환경 (CV)", "동네정보", "교산 시뮬레이션", "분석 방법론"]
+)
 
 # ============================
 # Tab 1: 지도
@@ -928,7 +930,205 @@ with tab_analysis:
 
 
 # ============================
-# Tab 3: 도로환경 (CV)
+# Tab 3: 시설점수
+# ============================
+with tab_facility:
+    st.markdown("### 시설물 보유 현황 및 분석")
+    st.caption("142개소 스쿨존의 9개 안전 시설물 보유 현황과 사고 관계를 분석합니다.")
+
+    # ── (a) 시설 보유 현황 KPI ──
+    _fac_totals = df[FACILITY_COLS].sum()
+    _fac_total_sum = int(_fac_totals.sum())
+    _fac_per_school = df[FACILITY_COLS].sum(axis=1)
+    _fac_mean_per_school = _fac_per_school.mean()
+    _fac_max_school = df.loc[_fac_per_school.idxmax(), "시설물명"]
+    _fac_max_val = int(_fac_per_school.max())
+    _fac_min_school = df.loc[_fac_per_school.idxmin(), "시설물명"]
+    _fac_min_val = int(_fac_per_school.min())
+
+    fk1, fk2, fk3, fk4 = st.columns(4)
+    fk1.metric("전체 시설 합계", f"{_fac_total_sum:,}개")
+    fk2.metric("교당 평균 시설 수", f"{_fac_mean_per_school:.1f}개")
+    fk3.metric("시설 최다 보유", f"{_fac_max_school} ({_fac_max_val}개)")
+    fk4.metric("시설 최소 보유", f"{_fac_min_school} ({_fac_min_val}개)")
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (b) 구별 시설 보유 현황 (Stacked Bar) ──
+    st.markdown("##### 구별 시설 보유 현황")
+    _gu_fac = df.groupby("구")[FACILITY_COLS].sum().reset_index()
+    _gu_fac_melt = _gu_fac.melt(id_vars="구", var_name="시설종류", value_name="수량")
+    fig_gu_fac = px.bar(
+        _gu_fac_melt, x="구", y="수량", color="시설종류",
+        barmode="stack",
+        title="구별 시설물 보유 현황 (9개 시설 합산)",
+        color_discrete_sequence=px.colors.qualitative.Set2,
+    )
+    fig_gu_fac.update_layout(**PLOTLY_LAYOUT, height=450)
+    st.plotly_chart(fig_gu_fac, use_container_width=True)
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (c) 등급별 시설 보유 현황 (Grouped Bar) ──
+    st.markdown("##### 등급별 시설 보유 현황")
+    _grade_fac = df.groupby("등급")[FACILITY_COLS].mean().reindex(["A", "B", "C", "D"]).reset_index()
+    _grade_fac_melt = _grade_fac.melt(id_vars="등급", var_name="시설종류", value_name="평균수량")
+    fig_grade_fac = px.bar(
+        _grade_fac_melt, x="시설종류", y="평균수량", color="등급",
+        barmode="group",
+        title="등급별 평균 시설 수 (A~D등급 비교)",
+        color_discrete_map={g: GRADE_COLORS[g] for g in ["A", "B", "C", "D"]},
+    )
+    fig_grade_fac.update_layout(**PLOTLY_LAYOUT, height=450)
+    st.plotly_chart(fig_grade_fac, use_container_width=True)
+
+    # 인사이트 카드: A등급 vs D등급 시설 격차
+    _a_fac_avg = df[df["등급"] == "A"][FACILITY_COLS].mean()
+    _d_fac_avg = df[df["등급"] == "D"][FACILITY_COLS].mean()
+    if not _a_fac_avg.isna().all() and not _d_fac_avg.isna().all():
+        _ad_gap = (_a_fac_avg - _d_fac_avg).sort_values(ascending=False)
+        _top3_gap = _ad_gap.head(3)
+        st.markdown(
+            '<div style="background:linear-gradient(135deg,#EBF5FB,#D4EFDF);'
+            'padding:14px 18px;border-radius:10px;border-left:4px solid #1B4F72;margin-bottom:16px;">'
+            '<b style="color:#1B4F72;">A등급 vs D등급 시설 격차 TOP 3</b><br>'
+            '<span style="font-size:13px;color:#2C3E50;">'
+            + " / ".join(
+                f'<b>{f}</b>: A등급 평균 {_a_fac_avg[f]:.1f} vs D등급 {_d_fac_avg[f]:.1f} (차이 {v:+.1f})'
+                for f, v in _top3_gap.items()
+            )
+            + '</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (d) 시설 수 vs 사고 관계 (Scatter + Trendline) ──
+    st.markdown("##### 시설 수 vs 사고 관계")
+    st.caption("9개 시설 합계와 발생건수의 관계 — 시설이 많을수록 사고가 줄어드는가?")
+
+    df["_시설합계"] = df[FACILITY_COLS].sum(axis=1)
+    fig_scatter = px.scatter(
+        df, x="_시설합계", y="발생건수",
+        color="등급", size="사고심각도" if "사고심각도" in df.columns else None,
+        color_discrete_map={g: GRADE_COLORS[g] for g in ["A", "B", "C", "D"]},
+        trendline="ols",
+        title="총 시설 수 vs 사고 발생건수",
+        labels={"_시설합계": "총 시설 수 (9개 합)", "발생건수": "사고 발생건수"},
+    )
+    fig_scatter.update_layout(**PLOTLY_LAYOUT, height=450)
+    st.plotly_chart(fig_scatter, use_container_width=True)
+
+    # 상관계수 표시
+    _corr_fac_acc = df[["_시설합계", "발생건수"]].corr().iloc[0, 1]
+    st.markdown(
+        f'<div style="background:#F0F6FC;padding:10px 16px;border-radius:8px;'
+        f'border-left:4px solid #2E86C1;">'
+        f'<span style="font-size:13px;color:#2C3E50;">'
+        f'상관계수: <b>{_corr_fac_acc:.3f}</b> '
+        f'({"음의 상관: 시설이 많을수록 사고가 적은 경향" if _corr_fac_acc < -0.1 else "양의 상관: 사고 후 시설을 설치하는 사후 대응 패턴" if _corr_fac_acc > 0.1 else "약한 상관"})'
+        f'</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (e) 시설 갭 분석 테이블 ──
+    st.markdown("##### 시설 갭 분석")
+
+    if selected_school != "(전체)":
+        _sel_row = df[df["시설물명"] == selected_school]
+        if len(_sel_row) > 0:
+            _sel_row = _sel_row.iloc[0]
+            _all_avg = df[FACILITY_COLS].mean()
+            _a_avg = df[df["등급"] == "A"][FACILITY_COLS].mean()
+            _d_avg = df[df["등급"] == "D"][FACILITY_COLS].mean()
+
+            _gap_data = []
+            for _fc in FACILITY_COLS:
+                _gap_data.append({
+                    "시설물": _fc,
+                    "전체 평균": round(_all_avg[_fc], 1),
+                    "A등급 평균": round(_a_avg[_fc], 1),
+                    "D등급 평균": round(_d_avg[_fc], 1),
+                    f"{selected_school}": int(_sel_row[_fc]),
+                    "A등급 대비 부족분": max(0, round(_a_avg[_fc] - _sel_row[_fc], 1)),
+                })
+            st.dataframe(
+                pd.DataFrame(_gap_data),
+                use_container_width=True, hide_index=True,
+            )
+    else:
+        st.caption("전체 학교 시설 순위 (시설 합계 상위 20)")
+        _rank_df = df[["시설물명", "시설유형", "구", "등급", "_시설합계"]].copy()
+        _rank_df.columns = ["시설물명", "시설유형", "구", "등급", "시설합계"]
+        _rank_df = _rank_df.nlargest(20, "시설합계").reset_index(drop=True)
+        _rank_df.index = _rank_df.index + 1
+        st.dataframe(_rank_df, use_container_width=True)
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (f) 개별 학교 시설 레이더 차트 ──
+    st.markdown("##### 개별 시설 레이더 차트")
+
+    if selected_school != "(전체)":
+        _sel_r = df[df["시설물명"] == selected_school]
+        if len(_sel_r) > 0:
+            _sel_r = _sel_r.iloc[0]
+            _a_avg_r = df[df["등급"] == "A"][FACILITY_COLS].mean()
+
+            # 정규화 (max 기준 0~100)
+            _radar_vals = []
+            _radar_a_vals = []
+            for _fc in FACILITY_COLS:
+                _mx = df[_fc].max()
+                _radar_vals.append(_sel_r[_fc] / _mx * 100 if _mx > 0 else 0)
+                _radar_a_vals.append(_a_avg_r[_fc] / _mx * 100 if _mx > 0 else 0)
+
+            _theta = FACILITY_COLS + [FACILITY_COLS[0]]
+
+            fig_fac_radar = go.Figure()
+            fig_fac_radar.add_trace(go.Scatterpolar(
+                r=_radar_vals + [_radar_vals[0]],
+                theta=_theta,
+                fill="toself", name=selected_school,
+                fillcolor="rgba(27,79,114,0.2)",
+                line=dict(color="#1B4F72", width=2),
+            ))
+            fig_fac_radar.add_trace(go.Scatterpolar(
+                r=_radar_a_vals + [_radar_a_vals[0]],
+                theta=_theta,
+                fill="toself", name="A등급 평균",
+                fillcolor="rgba(39,174,96,0.1)",
+                line=dict(color="#27AE60", width=1, dash="dash"),
+            ))
+            fig_fac_radar.update_layout(
+                **PLOTLY_LAYOUT,
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#D6EAF8"),
+                    angularaxis=dict(gridcolor="#D6EAF8"),
+                    bgcolor="#FAFCFF",
+                ),
+                title=f"{selected_school} 시설 현황 vs A등급 평균",
+                height=450, showlegend=True,
+                legend=dict(x=0.01, y=0.99),
+            )
+            st.plotly_chart(fig_fac_radar, use_container_width=True)
+    else:
+        st.markdown(
+            "<div style='background:#F0F6FC;padding:20px;border-radius:8px;"
+            "text-align:center;color:#1A5276;'>"
+            "사이드바에서 개별 시설을 선택하면<br>시설 레이더 차트가 표시됩니다."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    # 임시 컬럼 제거
+    df.drop(columns=["_시설합계"], inplace=True, errors="ignore")
+
+
+# ============================
+# Tab 4: 도로환경 (CV)
 # ============================
 with tab_cv:
     st.markdown("### 캡스톤 연구: 3단계 사고 예측 모델")
@@ -1531,6 +1731,212 @@ with tab_sim:
             "상태": "충족" if gs_v >= gs_aavg else "미달",
         })
     st.dataframe(pd.DataFrame(gs_rec), use_container_width=True, hide_index=True)
+
+
+# ============================
+# Tab 7: 분석 방법론
+# ============================
+with tab_method:
+    st.markdown("### 분석 방법론")
+    st.caption("스쿨존 안전등급 분석에 사용된 데이터, 변수, 모델을 설명합니다.")
+
+    # ── (a) 프로젝트 개요 ──
+    st.markdown("##### 프로젝트 개요")
+    st.markdown(
+        '<div style="background:#F0F6FC;padding:16px 20px;border-radius:10px;'
+        'border-left:4px solid #1B4F72;margin-bottom:16px;">'
+        '<span style="font-size:14px;color:#2C3E50;">'
+        '<b style="color:#1B4F72;">목표:</b> 성남시 어린이 보호구역(스쿨존) 142개소의 '
+        '안전등급을 데이터 기반으로 분석하여, 시설물 투자 우선순위를 제공합니다.<br><br>'
+        '<b style="color:#1B4F72;">분석 대상:</b> 성남시 142개소 '
+        '(수정구 41 / 중원구 26 / 분당구 75)<br>'
+        '<b style="color:#1B4F72;">분석 기간:</b> 2018~2023년 사고 데이터 + 2024년 시설 현황<br>'
+        '<b style="color:#1B4F72;">핵심 메시지:</b> 스쿨존 사고는 <b>도로 구조 + 정책(시설) + 노출(어린이)</b>의 결합 결과이며, '
+        '시설물 투입이 사고 예방의 핵심이다.'
+        '</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (b) 사용 변수 목록 테이블 ──
+    st.markdown("##### 사용 변수 목록")
+
+    _var_data = [
+        # 시설 변수
+        {"카테고리": "시설", "변수명": "도로적색표면", "설명": "보호구역 내 적색 도로 표면 개수", "출처": "공공데이터포털", "범위": "0~40+"},
+        {"카테고리": "시설", "변수명": "신호등", "설명": "보호구역 내 교통 신호등 수", "출처": "공공데이터포털", "범위": "0~20+"},
+        {"카테고리": "시설", "변수명": "횡단보도", "설명": "보호구역 내 횡단보도 수", "출처": "공공데이터포털", "범위": "0~15+"},
+        {"카테고리": "시설", "변수명": "도로안전표지", "설명": "속도 제한, 주의 표지 등 안전표지 수", "출처": "공공데이터포털", "범위": "0~15+"},
+        {"카테고리": "시설", "변수명": "생활안전CCTV", "설명": "보호구역 300m 내 생활안전 CCTV 수", "출처": "공공데이터포털", "범위": "0~50+"},
+        {"카테고리": "시설", "변수명": "무인교통단속카메라", "설명": "보호구역 내 과속/신호 단속 카메라 수", "출처": "공공데이터포털", "범위": "0~10"},
+        {"카테고리": "시설", "변수명": "보호구역표지판", "설명": "어린이 보호구역 안내 표지판 수", "출처": "공공데이터포털", "범위": "0~80+"},
+        {"카테고리": "시설", "변수명": "옐로카펫", "설명": "횡단보도 앞 노란색 안전 구역 수", "출처": "공공데이터포털", "범위": "0~5"},
+        {"카테고리": "시설", "변수명": "무단횡단방지펜스", "설명": "무단횡단 방지용 보행자 펜스 수", "출처": "공공데이터포털", "범위": "0~30+"},
+        # 사고 변수
+        {"카테고리": "사고", "변수명": "발생건수", "설명": "2018~2023 스쿨존 교통사고 건수", "출처": "도로교통공단", "범위": "0~38"},
+        {"카테고리": "사고", "변수명": "사고심각도", "설명": "사망x10 + 중상x5 + 경상x3 + 부상x1", "출처": "산출", "범위": "0~200+"},
+        # 인구 변수
+        {"카테고리": "인구", "변수명": "어린이비율", "설명": "행정동 0~14세 어린이 인구 비율 (%)", "출처": "경기데이터드림", "범위": "5~25%"},
+        # CV 변수
+        {"카테고리": "CV (도로환경)", "변수명": "CV_도로폭확률", "설명": "CNN 예측 넓은 도로 확률", "출처": "Street View 분석", "범위": "0~1"},
+        {"카테고리": "CV (도로환경)", "변수명": "CV_분리장치확률", "설명": "CNN 예측 차도-보도 분리 장치 확률", "출처": "Street View 분석", "범위": "0~1"},
+        {"카테고리": "CV (도로환경)", "변수명": "CV_도로상대폭", "설명": "이미지 내 도로가 차지하는 비율", "출처": "Street View 분석", "범위": "0~1"},
+        {"카테고리": "CV (도로환경)", "변수명": "CV_보행공간비율", "설명": "이미지 내 보행 공간 비율", "출처": "Street View 분석", "범위": "0~1"},
+        {"카테고리": "CV (도로환경)", "변수명": "CV_주정차밀도", "설명": "이미지 내 주정차 차량 밀도", "출처": "Street View 분석", "범위": "0~10+"},
+    ]
+    st.dataframe(pd.DataFrame(_var_data), use_container_width=True, hide_index=True)
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (c) 안전점수 계산 방법 ──
+    st.markdown("##### 안전점수 계산 방법")
+    st.markdown(
+        '<div style="background:#EBF5FB;padding:16px 20px;border-radius:10px;'
+        'border-left:4px solid #2E86C1;margin-bottom:12px;">'
+        '<b style="color:#1B4F72;font-size:15px;">안전점수 산출 공식</b><br><br>'
+        '<span style="font-size:14px;color:#2C3E50;">'
+        '<code style="background:#D6EAF8;padding:6px 12px;border-radius:6px;font-size:14px;">'
+        '안전점수 = 기본(50) + 가산점(시설) + 가산점(보너스) - 감산점(사고+환경)'
+        '</code><br><br>'
+        '<b>가산점(시설):</b> 9개 시설물 보유량 기반 점수 (많을수록 가산)<br>'
+        '<b>가산점(보너스):</b> 어린이비율 등 환경적 보너스<br>'
+        '<b>감산점:</b> 사고 발생건수, 사고심각도 기반 감점'
+        '</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="background:#F0F6FC;padding:14px 18px;border-radius:10px;'
+        'border-left:4px solid #154360;margin-bottom:16px;">'
+        '<b style="color:#1B4F72;">등급 기준 (사분위수)</b><br>'
+        '<span style="font-size:13px;color:#2C3E50;">'
+        '<b style="color:#154360;">A등급 (우수)</b>: 상위 25% &nbsp;&nbsp;|&nbsp;&nbsp; '
+        '<b style="color:#2471A3;">B등급 (양호)</b>: 25~50% &nbsp;&nbsp;|&nbsp;&nbsp; '
+        '<b style="color:#85C1E9;">C등급 (보통)</b>: 50~75% &nbsp;&nbsp;|&nbsp;&nbsp; '
+        '<b style="color:#E74C3C;">D등급 (주의)</b>: 하위 25%'
+        '</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (d) 3단계 사고 예측 모델 ──
+    st.markdown("##### 3단계 사고 예측 모델")
+    st.markdown(
+        '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
+        # 1단계
+        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FEF9E7,#FCF3CF);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #F39C12;">'
+        '<b style="color:#F39C12;font-size:15px;">1단계: 구조 모델</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        'Google Street View 이미지 분석<br>'
+        '5개 CV 변수 (도로폭, 분리장치, 보행공간 등)<br>'
+        'Binary 분류 (사고 부근 여부)<br>'
+        '<b>Logistic Regression</b>'
+        '</span></div>'
+        # 화살표
+        '<div style="display:flex;align-items:center;font-size:24px;color:#1B4F72;">&#10132;</div>'
+        # 2단계
+        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FDEDEC,#F9EBEA);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #E74C3C;">'
+        '<b style="color:#E74C3C;font-size:15px;">2단계: 외부검증</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '구조 위험도를 시설 데이터에 적용<br>'
+        '도로 구조 단독으로는 설명력 부족<br>'
+        '<b>AUC 하락 확인</b>'
+        '</span></div>'
+        # 화살표
+        '<div style="display:flex;align-items:center;font-size:24px;color:#1B4F72;">&#10132;</div>'
+        # 3단계
+        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#D4EFDF,#EAFAF1);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #27AE60;">'
+        '<b style="color:#27AE60;font-size:15px;">3단계: 통합 모델</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '구조위험 + 9개 시설 + 어린이비율<br>'
+        '3-class: 안전(0건) / 주의(1~6건) / 위험(7건+)<br>'
+        '<b>Pipeline(StandardScaler + LR)</b>'
+        '</span></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    _m_col1, _m_col2 = st.columns(2)
+    with _m_col1:
+        st.markdown(
+            '<div style="background:#F0F6FC;padding:12px 16px;border-radius:8px;'
+            'border-left:4px solid #2E86C1;">'
+            '<b style="color:#1B4F72;">3-class 라벨링 기준</b><br>'
+            '<span style="font-size:13px;color:#2C3E50;">'
+            '사고 0건 → <b>안전</b> (82개소, 57.7%)<br>'
+            '사고 1~6건 → <b>주의</b> (25개소, 17.6%)<br>'
+            '사고 7건+ → <b>위험</b> (35개소, 24.6%)'
+            '</span></div>',
+            unsafe_allow_html=True,
+        )
+    with _m_col2:
+        st.markdown(
+            f'<div style="background:#D4EFDF;padding:12px 16px;border-radius:8px;'
+            f'border-left:4px solid #27AE60;">'
+            f'<b style="color:#1B4F72;">모델 성능</b><br>'
+            f'<span style="font-size:13px;color:#2C3E50;">'
+            f'1단계 구조 모델 AUC: <b>{integ_auc:.3f}</b> 수준의 통합 모델<br>'
+            f'3단계 통합 모델 Weighted OVR AUC: <b>{integ_auc:.3f}</b><br>'
+            f'5-Fold Cross Validation 기반'
+            f'</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (e) 교산 시뮬레이션 설명 ──
+    st.markdown("##### 교산 신도시 시뮬레이션 방법")
+    st.markdown(
+        f'<div style="background:#FEF9E7;padding:16px 20px;border-radius:10px;'
+        f'border-left:4px solid #F39C12;margin-bottom:16px;">'
+        f'<span style="font-size:14px;color:#2C3E50;">'
+        f'<b style="color:#F39C12;">안전점수 예측 모델</b><br>'
+        f'성남시 142개소 데이터로 학습한 <b>LinearRegression</b> 모델 (R² = {model_r2:.3f})<br>'
+        f'입력: 9개 시설물 수량 + 발생건수(신도시=0) + 어린이비율<br>'
+        f'출력: 예상 안전점수 → 사분위수 기반 등급 부여<br><br>'
+        f'<b style="color:#F39C12;">사고확률 예측 모델</b><br>'
+        f'3단계 통합 모델(LogisticRegression)로 안전/주의/위험 확률 예측<br>'
+        f'입력: 구조위험도(중앙값) + 9개 시설물 + 어린이비율<br>'
+        f'출력: 3-class 확률 (안전 / 주의 / 위험)<br><br>'
+        f'<b style="color:#F39C12;">흐름</b>: 시설물 수량 입력 → 안전점수 + 등급 예측 → '
+        f'사고확률 예측 → 시설물 +1개 민감도 분석 → 우선 투자 시설 TOP 3 추천'
+        f'</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (f) 데이터 출처 ──
+    st.markdown("##### 데이터 출처")
+    st.markdown(
+        '<div style="background:#F0F6FC;padding:16px 20px;border-radius:10px;">'
+        '<table style="width:100%;font-size:13px;color:#2C3E50;border-collapse:collapse;">'
+        '<tr style="background:#D6EAF8;font-weight:600;color:#1B4F72;">'
+        '<td style="padding:8px 12px;">출처</td>'
+        '<td style="padding:8px 12px;">데이터 내용</td>'
+        '<td style="padding:8px 12px;">기간</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">공공데이터포털</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">스쿨존 목록, 9개 시설물 현황</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2024</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">도로교통공단</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">어린이보호구역 교통사고 통계</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2018~2023</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">경기데이터드림</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">행정동별 연령별 인구 (어린이비율)</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2024</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">성남시</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">교산 신도시 교육시설·공공청사 계획</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2025</td></tr>'
+        '<tr><td style="padding:6px 12px;">Google Street View</td>'
+        '<td style="padding:6px 12px;">스쿨존 도로환경 이미지 (CV 분석용)</td>'
+        '<td style="padding:6px 12px;">2023~2024</td></tr>'
+        '</table></div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ──────────────────────────────────────────────
