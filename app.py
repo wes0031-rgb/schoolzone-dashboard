@@ -207,7 +207,17 @@ def load_cv_features():
 
 @st.cache_data
 def load_gwangmyung():
-    return pd.read_csv(DATA_DIR / "광명_스쿨존.csv", encoding="utf-8-sig")
+    _gm = pd.read_csv(DATA_DIR / "5_gwangmyung_final_dataset_renew.csv", encoding="cp949")
+    _gm = _gm.rename(columns={
+        "어린이 비율(%)": "어린이비율",
+        "어린이 총인구": "어린이인구_0_14",
+        "동": "행정동",
+    })
+    if "시설유형" not in _gm.columns:
+        _gm["시설유형"] = "초등학교"
+    if "구" not in _gm.columns:
+        _gm["구"] = "광명시"
+    return _gm
 
 
 @st.cache_data
@@ -1136,7 +1146,7 @@ with tab_facility:
     )
     fig_gu_fac.update_layout(**PLOTLY_LAYOUT, height=450)
     st.plotly_chart(fig_gu_fac, use_container_width=True)
-    st.caption("※ 광명시: 도로안전표지·생활안전CCTV·무인교통단속카메라·보호구역표지판 데이터 미수집 (0 표시)")
+    st.caption("※ 성남시 3구 + 광명시 시설물 보유 현황 비교")
 
     # ── (b-2) 구별 등급 분포 파이차트 (성남 + 광명) ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
@@ -2013,6 +2023,13 @@ with tab_method:
         unsafe_allow_html=True,
     )
 
+    # ── (a-1) 시스템 아키텍처 ──
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+    st.markdown("##### 시스템 아키텍처")
+    _arch_path = DATA_DIR / "system_architecture.jpg"
+    if _arch_path.exists():
+        st.image(str(_arch_path), caption="데이터 수집 → AI 비전 분석 → ML 통합 분석 → 서비스 인터페이스", use_container_width=True)
+
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
     # ── (b) 사용 변수 목록 테이블 ──
@@ -2042,6 +2059,58 @@ with tab_method:
         {"카테고리": "CV (도로환경)", "변수명": "CV_주정차밀도", "설명": "이미지 내 주정차 차량 밀도", "출처": "카카오맵 로드뷰", "범위": "0~10+"},
     ]
     st.dataframe(pd.DataFrame(_var_data), use_container_width=True, hide_index=True)
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (b-1) 스케일링 전후 비교 차트 ──
+    st.markdown("##### 전처리: 스케일링 전후 Skewness 비교")
+    st.caption("skewness > 1인 변수에 Log(x+1) 변환 → StandardScaler 적용. 나머지는 StandardScaler만 적용.")
+
+    _sum_sn_path = DATA_DIR / "feature_summary_sn.csv"
+    _sum_gm_path = DATA_DIR / "feature_summary_gm.csv"
+    if _sum_sn_path.exists() and _sum_gm_path.exists():
+        _sum_sn = pd.read_csv(_sum_sn_path, index_col=0)
+        _sum_gm = pd.read_csv(_sum_gm_path, index_col=0)
+
+        _sk_col1, _sk_col2 = st.columns(2)
+
+        for _sk_col, _sk_df, _sk_title, _sk_clr_before, _sk_clr_after in [
+            (_sk_col1, _sum_sn, "성남시 (142개소)", "#E67E22", "#27AE60"),
+            (_sk_col2, _sum_gm, "광명시 (51개소)", "#E67E22", "#27AE60"),
+        ]:
+            with _sk_col:
+                _sk_labels = _sk_df.index.tolist()
+                fig_sk = go.Figure()
+                fig_sk.add_trace(go.Bar(
+                    name="변환 전", x=_sk_labels, y=_sk_df["skewness_전"],
+                    marker_color=_sk_clr_before, opacity=0.7,
+                ))
+                fig_sk.add_trace(go.Bar(
+                    name="변환 후", x=_sk_labels, y=_sk_df["skewness_후"],
+                    marker_color=_sk_clr_after, opacity=0.9,
+                ))
+                fig_sk.add_hline(y=1.0, line_dash="dash", line_color="#E74C3C",
+                                 annotation_text="skew=1 기준", annotation_position="top left",
+                                 annotation_font_size=10)
+                fig_sk.update_layout(
+                    **PLOTLY_LAYOUT, height=350, barmode="group",
+                    title=_sk_title,
+                    xaxis=dict(title="", tickangle=-45, tickfont=dict(size=9)),
+                    yaxis=dict(title="Skewness"),
+                    legend=dict(x=0.01, y=0.99, font=dict(size=10)),
+                    margin=dict(b=80),
+                )
+                st.plotly_chart(fig_sk, use_container_width=True)
+
+        # 변환 방식 요약
+        _log_vars = _sum_sn[_sum_sn["변환방식"] == "Log+Standard"].index.tolist()
+        st.markdown(
+            f'<div style="background:#EAFAF1;padding:10px 14px;border-radius:8px;'
+            f'font-size:13px;color:#2C3E50;margin-bottom:16px;">'
+            f'<b>Log(x+1) + StandardScaler 적용 변수:</b> {", ".join(_log_vars)}<br>'
+            f'<b>StandardScaler만 적용:</b> 나머지 {len(_sum_sn) - len(_log_vars)}개 변수</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
