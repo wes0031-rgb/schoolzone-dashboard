@@ -1614,84 +1614,6 @@ with tab_cv:
                     unsafe_allow_html=True,
                 )
 
-            # ── (d-1.5) A등급 vs D등급 로드뷰 비교 ──
-            st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-            st.markdown("##### A등급 vs D등급 도로환경 비교")
-            st.caption("안전등급 최상위(A)와 최하위(D) 학교의 로드뷰 · CV 지표를 직접 비교합니다.")
-
-            _a_schools = df_cv[df_cv["등급"] == "A"].copy()
-            _d_schools = df_cv[df_cv["등급"] == "D"].copy()
-            if len(_a_schools) > 0 and len(_d_schools) > 0:
-                # 대표 선정: A등급 중 활성_안전점수 최고, D등급 중 최저
-                _a_rep = _a_schools.sort_values("활성_안전점수", ascending=False).iloc[0]
-                _d_rep = _d_schools.sort_values("활성_안전점수", ascending=True).iloc[0]
-
-                _ad_col1, _ad_col2 = st.columns(2)
-
-                for _ad_col, _ad_row, _ad_label, _ad_border, _ad_bg in [
-                    (_ad_col1, _a_rep, "A등급 (최상위)", "#27AE60", "#EAFAF1"),
-                    (_ad_col2, _d_rep, "D등급 (최하위)", "#E74C3C", "#FDEDEC"),
-                ]:
-                    with _ad_col:
-                        st.markdown(
-                            f'<div style="background:{_ad_bg};padding:12px 14px;border-radius:10px;'
-                            f'border:2px solid {_ad_border};margin-bottom:8px;">'
-                            f'<div style="font-weight:700;color:{_ad_border};font-size:15px;'
-                            f'text-align:center;margin-bottom:6px;">{_ad_label}</div>'
-                            f'<div style="text-align:center;font-size:13px;color:#2C3E50;'
-                            f'font-weight:600;">{_ad_row["시설물명"]}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                        _ad_rv = _ad_row["시설물명"].replace(" ", "_")
-                        _ad_path = DATA_DIR / "roadview" / f"{_ad_rv}_북쪽.jpg"
-                        if not _ad_path.exists():
-                            _ad_path = DATA_DIR / "roadview" / f"{_ad_row['시설물명']}_북쪽.jpg"
-                        if _ad_path.exists():
-                            st.image(str(_ad_path), use_container_width=True)
-                        else:
-                            st.info("로드뷰 이미지 없음")
-
-                        # CV 게이지 비교 (소형)
-                        _ad_items = [
-                            ("넓은도로", _ad_row["CV_도로폭확률"], "#E74C3C"),
-                            ("차단시설", _ad_row["CV_분리장치확률"], "#27AE60"),
-                            ("도로비율", _ad_row["CV_도로상대폭"], "#3498DB"),
-                            ("보행공간", _ad_row["CV_보행공간비율"], "#8E44AD"),
-                            ("주정차", min(_ad_row["CV_주정차밀도"] / 5, 1.0), "#F39C12"),
-                        ]
-                        _ad_html = ""
-                        for _al, _av, _ac in _ad_items:
-                            _ap = min(_av * 100, 100)
-                            _ad_html += (
-                                f'<div style="margin-bottom:6px;">'
-                                f'<div style="display:flex;justify-content:space-between;font-size:11px;">'
-                                f'<span>{_al}</span><span>{_ap:.0f}%</span></div>'
-                                f'<div style="background:#ECF0F1;border-radius:4px;height:10px;overflow:hidden;">'
-                                f'<div style="width:{_ap:.0f}%;height:100%;background:{_ac};border-radius:4px;">'
-                                f'</div></div></div>'
-                            )
-                        st.markdown(
-                            f'<div style="padding:8px 10px;border-radius:8px;'
-                            f'border:1px solid #D5D8DC;">{_ad_html}</div>',
-                            unsafe_allow_html=True,
-                        )
-
-                # 지표 차이 요약
-                _diff_items = []
-                for _ci, _cl in zip(cv_cols, cv_labels):
-                    _a_v = _a_rep[_ci]
-                    _d_v = _d_rep[_ci]
-                    _diff = _a_v - _d_v
-                    _diff_items.append({"지표": _cl, "A등급": f"{_a_v:.3f}", "D등급": f"{_d_v:.3f}",
-                                        "차이(A-D)": f"{_diff:+.3f}"})
-                st.markdown(
-                    '<div style="background:#F8F9F9;padding:10px 14px;border-radius:8px;'
-                    'margin-top:8px;font-size:13px;color:#2C3E50;">'
-                    '<b>핵심 차이:</b> A등급은 차단시설·보행공간이 높고, 주정차 밀도가 낮은 패턴을 보입니다. '
-                    'D등급은 도로폭이 넓어도 보행자 보호 시설이 부족합니다.</div>',
-                    unsafe_allow_html=True,
-                )
-
             # ── (d-2) 유사 도로환경 학교 매칭 ──
             st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
             st.markdown("##### 유사 도로환경 학교")
@@ -1735,6 +1657,77 @@ with tab_cv:
                 "</div>",
                 unsafe_allow_html=True,
             )
+
+    # ── (e) A등급 vs D등급 로드뷰 비교 (항상 표시) ──
+    st.markdown("---")
+    st.markdown("##### A등급 vs D등급 도로환경 비교")
+    st.caption("안전등급 최상위(A)와 최하위(D) 학교의 로드뷰 · CV 지표를 직접 비교합니다.")
+
+    _a_schools = df_cv[df_cv["등급"] == "A"].copy()
+    _d_schools = df_cv[df_cv["등급"] == "D"].copy()
+    if len(_a_schools) > 0 and len(_d_schools) > 0:
+        # 대표 선정: A등급 중 활성_안전점수 최고, D등급 중 최저
+        _a_rep = _a_schools.sort_values("활성_안전점수", ascending=False).iloc[0]
+        _d_rep = _d_schools.sort_values("활성_안전점수", ascending=True).iloc[0]
+
+        _ad_col1, _ad_col2 = st.columns(2)
+
+        for _ad_col, _ad_row, _ad_label, _ad_border, _ad_bg in [
+            (_ad_col1, _a_rep, "A등급 (최상위)", "#27AE60", "#EAFAF1"),
+            (_ad_col2, _d_rep, "D등급 (최하위)", "#E74C3C", "#FDEDEC"),
+        ]:
+            with _ad_col:
+                st.markdown(
+                    f'<div style="background:{_ad_bg};padding:12px 14px;border-radius:10px;'
+                    f'border:2px solid {_ad_border};margin-bottom:8px;">'
+                    f'<div style="font-weight:700;color:{_ad_border};font-size:15px;'
+                    f'text-align:center;margin-bottom:6px;">{_ad_label}</div>'
+                    f'<div style="text-align:center;font-size:13px;color:#2C3E50;'
+                    f'font-weight:600;">{_ad_row["시설물명"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                _ad_rv = _ad_row["시설물명"].replace(" ", "_")
+                _ad_path = DATA_DIR / "roadview" / f"{_ad_rv}_북쪽.jpg"
+                if not _ad_path.exists():
+                    _ad_path = DATA_DIR / "roadview" / f"{_ad_row['시설물명']}_북쪽.jpg"
+                if _ad_path.exists():
+                    st.image(str(_ad_path), use_container_width=True)
+                else:
+                    st.info("로드뷰 이미지 없음")
+
+                # CV 게이지 비교 (소형)
+                _ad_items = [
+                    ("넓은도로", _ad_row["CV_도로폭확률"], "#E74C3C"),
+                    ("차단시설", _ad_row["CV_분리장치확률"], "#27AE60"),
+                    ("도로비율", _ad_row["CV_도로상대폭"], "#3498DB"),
+                    ("보행공간", _ad_row["CV_보행공간비율"], "#8E44AD"),
+                    ("주정차", min(_ad_row["CV_주정차밀도"] / 5, 1.0), "#F39C12"),
+                ]
+                _ad_html = ""
+                for _al, _av, _ac in _ad_items:
+                    _ap = min(_av * 100, 100)
+                    _ad_html += (
+                        f'<div style="margin-bottom:6px;">'
+                        f'<div style="display:flex;justify-content:space-between;font-size:11px;">'
+                        f'<span>{_al}</span><span>{_ap:.0f}%</span></div>'
+                        f'<div style="background:#ECF0F1;border-radius:4px;height:10px;overflow:hidden;">'
+                        f'<div style="width:{_ap:.0f}%;height:100%;background:{_ac};border-radius:4px;">'
+                        f'</div></div></div>'
+                    )
+                st.markdown(
+                    f'<div style="padding:8px 10px;border-radius:8px;'
+                    f'border:1px solid #D5D8DC;">{_ad_html}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # 지표 차이 요약
+        st.markdown(
+            '<div style="background:#F8F9F9;padding:10px 14px;border-radius:8px;'
+            'margin-top:8px;font-size:13px;color:#2C3E50;">'
+            '<b>핵심 차이:</b> A등급은 차단시설·보행공간이 높고, 주정차 밀도가 낮은 패턴을 보입니다. '
+            'D등급은 도로폭이 넓어도 보행자 보호 시설이 부족합니다.</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ============================
