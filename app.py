@@ -966,6 +966,21 @@ with _sub_indiv:
 
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
+        # ── 로드뷰 이미지 ──
+        _rv_name = selected_school.replace(" ", "_")
+        _rv_path = DATA_DIR / "roadview" / f"{_rv_name}_북쪽.jpg"
+        if _rv_path.exists():
+            st.markdown("##### 로드뷰 (북쪽 방향)")
+            st.image(str(_rv_path), use_container_width=True)
+        else:
+            # 공백 없는 원본 이름으로도 시도
+            _rv_path2 = DATA_DIR / "roadview" / f"{selected_school}_북쪽.jpg"
+            if _rv_path2.exists():
+                st.markdown("##### 로드뷰 (북쪽 방향)")
+                st.image(str(_rv_path2), use_container_width=True)
+
+        st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+
         # ── 레이더 차트 ──
         radar_feats = FACILITY_COLS
         radar_labels = radar_feats.copy()
@@ -1555,11 +1570,20 @@ with tab_cv:
                 legend=dict(x=0.01, y=0.99),
             )
             st.plotly_chart(fig_cv_radar, use_container_width=True)
+
+            # ── 로드뷰 이미지 (CV 원본) ──
+            _cv_rv_name = selected_school.replace(" ", "_")
+            _cv_rv_path = DATA_DIR / "roadview" / f"{_cv_rv_name}_북쪽.jpg"
+            if not _cv_rv_path.exists():
+                _cv_rv_path = DATA_DIR / "roadview" / f"{selected_school}_북쪽.jpg"
+            if _cv_rv_path.exists():
+                st.markdown("##### CV 분석 원본 — 로드뷰 이미지")
+                st.image(str(_cv_rv_path), caption=f"{selected_school} 북쪽 방향 로드뷰", use_container_width=True)
         else:
             st.markdown(
                 "<div style='background:#F5EEF8;padding:20px;border-radius:8px;"
                 "text-align:center;color:#6C3483;margin-top:40px;'>"
-                "사이드바에서 개별 시설을 선택하면<br>도로환경 레이더 차트가 표시됩니다."
+                "사이드바에서 개별 시설을 선택하면<br>도로환경 레이더 차트와 로드뷰 이미지가 표시됩니다."
                 "</div>",
                 unsafe_allow_html=True,
             )
