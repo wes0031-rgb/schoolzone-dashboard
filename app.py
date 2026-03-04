@@ -404,7 +404,8 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
         if len(sel) > 0:
             center = [sel.iloc[0]["위도"], sel.iloc[0]["경도"]]
             zoom = 15
-    m = folium.Map(location=center, zoom_start=zoom, tiles="cartodbpositron")
+    m = folium.Map(location=center, zoom_start=zoom, tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ko",
+        attr="Google Maps")
 
     if geo and geo.get("features"):
         choropleth_data = pop_df[["구명", "동명", "어린이_비율"]].copy()
@@ -1888,7 +1889,8 @@ with tab_sim:
     GS_GRADE_COLORS = {"A": "#27AE60", "B": "#F1C40F", "C": "#E67E22", "D": "#E74C3C"}
     gm_map = folium.Map(
         location=[gm_df["위도"].mean(), gm_df["경도"].mean()],
-        zoom_start=13, tiles="cartodbpositron",
+        zoom_start=13, tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ko",
+        attr="Google Maps",
     )
     for _, gm_r in gm_result.iterrows():
         gm_color = GS_GRADE_COLORS.get(gm_r["예상등급"], "#999")
