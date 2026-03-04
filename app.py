@@ -30,43 +30,54 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
 html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 
+/* ── 사이드바: 따뜻한 차콜 ── */
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0A1628 0%, #132743 100%);
+    background: linear-gradient(180deg, #2C3E50 0%, #34495E 100%);
 }
-section[data-testid="stSidebar"] * { color: #D6EAF8 !important; }
+section[data-testid="stSidebar"] * { color: #FEF9E7 !important; }
 section[data-testid="stSidebar"] .stMultiSelect > div > div,
 section[data-testid="stSidebar"] .stSelectbox > div > div {
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
+    background: rgba(255,255,255,0.10) !important;
+    border: 1px solid rgba(243,156,18,0.35) !important;
     border-radius: 8px !important;
 }
-h1 { color: #1B4F72 !important; font-weight: 700 !important; letter-spacing: -0.5px; }
+
+/* ── 헤딩: 스쿨존 다크그린 ── */
+h1 { color: #1E8449 !important; font-weight: 700 !important; letter-spacing: -0.5px; }
+h2, h3 { color: #2C3E50 !important; font-weight: 600 !important; }
+
+/* ── KPI 카드: 앰버-옐로 그라데이션 ── */
 div[data-testid="stMetric"] {
-    background: linear-gradient(135deg, #1B4F72, #2E86C1);
+    background: linear-gradient(135deg, #F39C12, #F1C40F);
     padding: 16px 20px; border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(27,79,114,0.25);
+    box-shadow: 0 4px 15px rgba(243,156,18,0.30);
 }
 div[data-testid="stMetric"] label {
-    color: #FFFFFF !important; font-size: 13px !important; font-weight: 500 !important;
+    color: #2C3E50 !important; font-size: 13px !important; font-weight: 500 !important;
 }
 div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-    color: #FFFFFF !important; font-size: 28px !important; font-weight: 700 !important;
+    color: #2C3E50 !important; font-size: 28px !important; font-weight: 700 !important;
 }
+
+/* ── 탭: 앰버 액센트 ── */
 button[data-baseweb="tab"] {
     font-size: 15px !important; font-weight: 500 !important;
-    color: #1A5276 !important; padding: 10px 24px !important;
+    color: #566573 !important; padding: 10px 24px !important;
 }
 button[data-baseweb="tab"][aria-selected="true"] {
-    color: #1B4F72 !important; border-bottom: 3px solid #1B4F72 !important;
+    color: #E67E22 !important; border-bottom: 3px solid #F39C12 !important;
 }
-h2, h3 { color: #1B4F72 !important; font-weight: 600 !important; }
+
+/* ── 데이터프레임 ── */
 div[data-testid="stDataFrame"] {
-    border: 1px solid #D6EAF8; border-radius: 8px; overflow: hidden;
+    border: 1px solid #F5CBA7; border-radius: 8px; overflow: hidden;
 }
 section[data-testid="stSidebar"] .stCheckbox label span { font-size: 14px !important; }
 .footer-text {
     text-align: center; color: #566573; font-size: 12px; padding: 10px 0 20px 0;
 }
+
+/* ── 경고 배너 ── */
 .warning-banner {
     background: linear-gradient(135deg, #FDEDEC, #F9EBEA);
     border-left: 4px solid #E74C3C; border-radius: 8px;
@@ -74,12 +85,14 @@ section[data-testid="stSidebar"] .stCheckbox label span { font-size: 14px !impor
 }
 .warning-banner b { color: #C0392B; }
 .warning-banner span { color: #555; font-size: 13px; }
+
+/* ── 제안 카드 ── */
 .suggestion-card {
-    background: #F0F6FC; border-radius: 8px; padding: 14px 16px;
-    border-left: 4px solid #2E86C1; margin-bottom: 8px;
+    background: #FEF9E7; border-radius: 8px; padding: 14px 16px;
+    border-left: 4px solid #F39C12; margin-bottom: 8px;
 }
-.suggestion-card .school-name { color: #1B4F72; font-weight: 700; font-size: 15px; }
-.suggestion-card .suggestion { color: #2E86C1; font-size: 13px; margin-top: 6px; }
+.suggestion-card .school-name { color: #2C3E50; font-weight: 700; font-size: 15px; }
+.suggestion-card .suggestion { color: #E67E22; font-size: 13px; margin-top: 6px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -89,7 +102,7 @@ section[data-testid="stSidebar"] .stCheckbox label span { font-size: 14px !impor
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 
-GRADE_COLORS = {"A": "#154360", "B": "#2471A3", "C": "#85C1E9", "D": "#E74C3C"}
+GRADE_COLORS = {"A": "#27AE60", "B": "#F1C40F", "C": "#E67E22", "D": "#E74C3C"}
 GRADE_LABELS = {"A": "A (우수)", "B": "B (양호)", "C": "C (보통)", "D": "D (주의)"}
 
 MAP_CENTER = [37.42, 127.13]
@@ -102,9 +115,9 @@ FACILITY_COLS = [
 
 PLOTLY_LAYOUT = dict(
     font=dict(family="Noto Sans KR, sans-serif"),
-    plot_bgcolor="#FAFCFF",
+    plot_bgcolor="#FFFDF5",
     paper_bgcolor="#FFFFFF",
-    title_font=dict(size=18, color="#1B4F72"),
+    title_font=dict(size=18, color="#2C3E50"),
 )
 
 # ──────────────────────────────────────────────
@@ -307,7 +320,7 @@ def make_popup(row):
     grade_label = GRADE_LABELS.get(grade_key, grade_key)
     return f"""
     <div style="font-family:'Noto Sans KR',sans-serif;width:260px;padding:4px;">
-      <div style="font-size:15px;font-weight:700;color:#1B4F72;margin-bottom:4px;">
+      <div style="font-size:15px;font-weight:700;color:#2C3E50;margin-bottom:4px;">
         {row['시설물명']}
         <span style="font-size:11px;color:#34495E;font-weight:400;margin-left:4px;">{row['시설유형']}</span>
       </div>
@@ -318,16 +331,16 @@ def make_popup(row):
       <span style="color:#2C3E50;font-size:13px;margin-left:6px;">
         {row['활성_안전점수']:.1f}점
       </span>
-      <hr style="margin:8px 0;border:none;border-top:1px solid #D6EAF8;">
+      <hr style="margin:8px 0;border:none;border-top:1px solid #F5CBA7;">
       <table style="font-size:11px;color:#2C3E50;width:100%;border-collapse:collapse;">
-        <tr style="background:#F0F6FC;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#1B4F72;">점수 구조</td></tr>
+        <tr style="background:#FEF5E7;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#2C3E50;">점수 구조</td></tr>
         <tr><td style="padding:2px 4px;">가산점(시설)</td><td style="text-align:right;font-weight:600;">{row['가산점_시설_V6']:.1f}점</td></tr>
         <tr><td style="padding:2px 4px;">가산점(보너스)</td><td style="text-align:right;font-weight:600;">{int(row['가산점_보너스_V6'])}점</td></tr>
         <tr style="background:#FDEDEC;"><td style="padding:2px 4px;">감산점 합계</td><td style="text-align:right;font-weight:600;color:#E74C3C;">-{row['감산점_합계_V6']:.1f}점</td></tr>
         <tr><td style="padding:2px 4px;">기본점(50)</td><td style="text-align:right;">50.0점</td></tr>
-        <tr style="background:#EBF5FB;"><td style="padding:2px 4px;font-weight:700;color:#1B4F72;">최종 안전점수</td><td style="text-align:right;font-weight:700;color:#1B4F72;">{row['활성_안전점수']:.1f}점</td></tr>
+        <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;color:#2C3E50;">최종 안전점수</td><td style="text-align:right;font-weight:700;color:#2C3E50;">{row['활성_안전점수']:.1f}점</td></tr>
       </table>
-      <hr style="margin:6px 0;border:none;border-top:1px solid #D6EAF8;">
+      <hr style="margin:6px 0;border:none;border-top:1px solid #F5CBA7;">
       <table style="font-size:10px;color:#444;width:100%;border-collapse:collapse;">
         <tr><td>적색표면 {int(row['도로적색표면'])}</td><td>신호등 {int(row['신호등'])}</td><td>횡단보도 {int(row['횡단보도'])}</td></tr>
         <tr><td>안전표지 {int(row['도로안전표지'])}</td><td>CCTV {int(row['생활안전CCTV'])}</td><td>카메라 {int(row['무인교통단속카메라'])}</td></tr>
@@ -335,9 +348,9 @@ def make_popup(row):
         <tr><td>발생건수 {int(row['발생건수'])}건 ({"안전" if row["발생건수"] == 0 else "주의" if row["발생건수"] <= 6 else "위험"})</td><td>어린이비율 {row['어린이비율']:.1f}%</td><td>구조위험 {row.get('structure_risk', 0):.0%}</td></tr>
       </table>
       {"" if pd.isna(row.get('CV_도로폭확률')) else f'''
-      <hr style="margin:6px 0;border:none;border-top:1px solid #E8DAEF;">
+      <hr style="margin:6px 0;border:none;border-top:1px solid #FDEBD0;">
       <table style="font-size:10px;color:#444;width:100%;border-collapse:collapse;">
-        <tr style="background:#F5EEF8;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#6C3483;">도로환경 (CV)</td></tr>
+        <tr style="background:#FEF9E7;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#E67E22;">도로환경 (CV)</td></tr>
         <tr><td style="padding:2px 4px;">넓은도로</td><td style="text-align:right;">{row["CV_도로폭확률"]:.0%}</td></tr>
         <tr><td style="padding:2px 4px;">분리장치</td><td style="text-align:right;">{row["CV_분리장치확률"]:.0%}</td></tr>
         <tr><td style="padding:2px 4px;">주정차</td><td style="text-align:right;">{row["CV_주정차밀도"]:.1f}대</td></tr>
@@ -373,10 +386,10 @@ def create_legend_html():
     <div style="position:fixed;bottom:30px;right:30px;z-index:1000;
          background:white;padding:12px 16px;border-radius:10px;
          box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px;
-         font-family:'Noto Sans KR',sans-serif;border:1px solid #D6EAF8;max-height:380px;overflow-y:auto;">
-      <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">안전등급</div>
+         font-family:'Noto Sans KR',sans-serif;border:1px solid #F5CBA7;max-height:380px;overflow-y:auto;">
+      <div style="font-weight:700;color:#2C3E50;margin-bottom:4px;">안전등급</div>
       <ul style="list-style:none;padding:0;margin:0 0 6px 0;">{grade_items}</ul>
-      <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;border-top:1px solid #D6EAF8;padding-top:6px;">시설물 레이어</div>
+      <div style="font-weight:700;color:#2C3E50;margin-bottom:4px;border-top:1px solid #F5CBA7;padding-top:6px;">시설물 레이어</div>
       <ul style="list-style:none;padding:0;margin:0;">{layer_items}</ul>
     </div>
     """
@@ -672,7 +685,7 @@ if len(filtered_df) == 0:
 # Header
 st.markdown("""
 <div style="margin-bottom:8px;">
-    <span style="font-size:36px;font-weight:700;color:#1B4F72;">
+    <span style="font-size:36px;font-weight:700;color:#2C3E50;">
         내 아이가 살기 좋은 동네
     </span>
     <span style="font-size:14px;color:#34495E;margin-left:12px;">
@@ -730,10 +743,10 @@ if len(filtered_df) > 0:
     )
 
     st.markdown(
-        '<div style="background:linear-gradient(135deg,#EBF5FB,#D4EFDF);'
-        'padding:14px 20px;border-radius:10px;border-left:4px solid #1B4F72;'
+        '<div style="background:linear-gradient(135deg,#FEF9E7,#FDEBD0);'
+        'padding:14px 20px;border-radius:10px;border-left:4px solid #E67E22;'
         'margin-bottom:16px;">'
-        '<b style="color:#1B4F72;font-size:15px;">핵심 발견</b><br>'
+        '<b style="color:#2C3E50;font-size:15px;">핵심 발견</b><br>'
         f'<span style="font-size:13px;color:#2C3E50;">'
         f'1. {_ins1}<br>2. {_ins2}<br>3. {_ins3}'
         f'</span></div>',
@@ -842,8 +855,8 @@ with _sub_all:
         title="안전점수 구성 요소 평균",
         color="항목",
         color_discrete_map={
-            "가산점(시설)": "#2E86C1",
-            "가산점(보너스)": "#5DADE2",
+            "가산점(시설)": "#F39C12",
+            "가산점(보너스)": "#F39C12",
             "감산점 합계": "#E74C3C",
         },
         text="평균",
@@ -856,7 +869,7 @@ with _sub_all:
         filtered_df, x="활성_안전점수", nbins=20,
         title="안전점수 분포",
         labels={"활성_안전점수": "안전점수"},
-        color_discrete_sequence=["#2E86C1"],
+        color_discrete_sequence=["#F39C12"],
     )
     fig_hist.update_layout(**PLOTLY_LAYOUT, height=380, yaxis_title="시설 수", bargap=0.08)
     st.plotly_chart(fig_hist, use_container_width=True)
@@ -953,9 +966,9 @@ with _sub_indiv:
         _gc = GRADE_COLORS.get(school_row["등급"], "#999")
         _gl = GRADE_LABELS.get(school_row["등급"], school_row["등급"])
         st.markdown(
-            f"<div style='background:#F0F6FC;padding:12px 16px;border-radius:8px;"
+            f"<div style='background:#FEF5E7;padding:12px 16px;border-radius:8px;"
             f"border-left:4px solid {_gc};'>"
-            f"<b style='color:#1B4F72;'>{selected_school}</b> &nbsp; "
+            f"<b style='color:#2C3E50;'>{selected_school}</b> &nbsp; "
             f"<span style='background:{_gc};color:#fff;padding:2px 10px;"
             f"border-radius:20px;font-size:12px;'>{_gl}</span> &nbsp; "
             f"<span style='color:#2C3E50;'>안전점수: <b>{school_row['활성_안전점수']:.1f}</b></span> &nbsp; "
@@ -996,13 +1009,13 @@ with _sub_indiv:
             r=vals, theta=radar_labels_closed,
             fill="toself", name=selected_school,
             fillcolor="rgba(46,134,193,0.2)",
-            line=dict(color="#1B4F72", width=2),
+            line=dict(color="#2C3E50", width=2),
         ))
         fig_radar.update_layout(
             **PLOTLY_LAYOUT,
             polar=dict(
-                radialaxis=dict(visible=True, range=[0, 100], gridcolor="#D6EAF8"),
-                angularaxis=dict(gridcolor="#D6EAF8"),
+                radialaxis=dict(visible=True, range=[0, 100], gridcolor="#F5CBA7"),
+                angularaxis=dict(gridcolor="#F5CBA7"),
                 bgcolor="#FAFCFF",
             ),
             title=f"{selected_school} 시설물 현황",
@@ -1038,9 +1051,9 @@ with _sub_indiv:
 
         top3 = pol_df.head(3)
         st.markdown(
-            f'<div style="background:linear-gradient(135deg,#D4EFDF,#EBF5FB);'
+            f'<div style="background:linear-gradient(135deg,#FDEBD0,#FEF9E7);'
             f'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
-            f'<b style="color:#1B4F72;">{selected_school}</b> — '
+            f'<b style="color:#2C3E50;">{selected_school}</b> — '
             f'현재 위험확률: <b>{pol_base_prob:.1%}</b><br>'
             f'<span style="font-size:13px;color:#2C3E50;">'
             f'위험확률 감소 TOP 3: '
@@ -1070,8 +1083,8 @@ with _sub_indiv:
         st.plotly_chart(fig_pol, use_container_width=True)
     else:
         st.markdown(
-            "<div style='background:#F0F6FC;padding:30px;border-radius:10px;"
-            "text-align:center;color:#1A5276;'>"
+            "<div style='background:#FEF5E7;padding:30px;border-radius:10px;"
+            "text-align:center;color:#E67E22;'>"
             "<span style='font-size:16px;font-weight:600;'>사이드바에서 개별 시설을 선택해 주세요</span><br><br>"
             "<span style='font-size:13px;color:#566573;'>"
             "시설을 선택하면 시설물 레이더 차트, 상세 정보,<br>"
@@ -1194,7 +1207,7 @@ with tab_facility:
     fig_cmp = px.bar(
         _cmp_melt, x="시설종류", y="교당 평균", color="지역",
         barmode="group", title="성남 vs 광명 — 교당 평균 시설 수 비교",
-        color_discrete_map={"성남시": "#1B4F72", "광명시": "#E67E22"},
+        color_discrete_map={"성남시": "#27AE60", "광명시": "#E67E22"},
     )
     fig_cmp.update_layout(**PLOTLY_LAYOUT, height=400)
     st.plotly_chart(fig_cmp, use_container_width=True)
@@ -1207,9 +1220,9 @@ with tab_facility:
         _ad_gap = (_a_fac_avg - _d_fac_avg).sort_values(ascending=False)
         _top3_gap = _ad_gap.head(3)
         st.markdown(
-            '<div style="background:linear-gradient(135deg,#EBF5FB,#D4EFDF);'
-            'padding:14px 18px;border-radius:10px;border-left:4px solid #1B4F72;margin-bottom:16px;">'
-            '<b style="color:#1B4F72;">A등급 vs D등급 시설 격차 TOP 3</b><br>'
+            '<div style="background:linear-gradient(135deg,#FEF9E7,#FDEBD0);'
+            'padding:14px 18px;border-radius:10px;border-left:4px solid #E67E22;margin-bottom:16px;">'
+            '<b style="color:#2C3E50;">A등급 vs D등급 시설 격차 TOP 3</b><br>'
             '<span style="font-size:13px;color:#2C3E50;">'
             + " / ".join(
                 f'<b>{f}</b>: A등급 평균 {_a_fac_avg[f]:.1f} vs D등급 {_d_fac_avg[f]:.1f} (차이 {v:+.1f})'
@@ -1239,8 +1252,8 @@ with tab_facility:
     # 상관계수 표시
     _corr_fac_acc = df[["_시설합계", "발생건수"]].corr().iloc[0, 1]
     st.markdown(
-        f'<div style="background:#F0F6FC;padding:10px 16px;border-radius:8px;'
-        f'border-left:4px solid #2E86C1;">'
+        f'<div style="background:#FEF5E7;padding:10px 16px;border-radius:8px;'
+        f'border-left:4px solid #F39C12;">'
         f'<span style="font-size:13px;color:#2C3E50;">'
         f'상관계수: <b>{_corr_fac_acc:.3f}</b> '
         f'({"음의 상관: 시설이 많을수록 사고가 적은 경향" if _corr_fac_acc < -0.1 else "양의 상관: 사고 후 시설을 설치하는 사후 대응 패턴" if _corr_fac_acc > 0.1 else "약한 상관"})'
@@ -1332,7 +1345,7 @@ with tab_facility:
                 theta=_theta,
                 fill="toself", name=selected_school,
                 fillcolor="rgba(27,79,114,0.2)",
-                line=dict(color="#1B4F72", width=2),
+                line=dict(color="#2C3E50", width=2),
             ))
             fig_fac_radar.add_trace(go.Scatterpolar(
                 r=_radar_a_vals + [_radar_a_vals[0]],
@@ -1344,8 +1357,8 @@ with tab_facility:
             fig_fac_radar.update_layout(
                 **PLOTLY_LAYOUT,
                 polar=dict(
-                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#D6EAF8"),
-                    angularaxis=dict(gridcolor="#D6EAF8"),
+                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#F5CBA7"),
+                    angularaxis=dict(gridcolor="#F5CBA7"),
                     bgcolor="#FAFCFF",
                 ),
                 title=f"{selected_school} 시설 현황 vs A등급 평균",
@@ -1355,8 +1368,8 @@ with tab_facility:
             st.plotly_chart(fig_fac_radar, use_container_width=True)
     else:
         st.markdown(
-            "<div style='background:#F0F6FC;padding:20px;border-radius:8px;"
-            "text-align:center;color:#1A5276;'>"
+            "<div style='background:#FEF5E7;padding:20px;border-radius:8px;"
+            "text-align:center;color:#E67E22;'>"
             "사이드바에서 개별 시설을 선택하면<br>시설 레이더 차트가 표시됩니다."
             "</div>",
             unsafe_allow_html=True,
@@ -1400,7 +1413,7 @@ with tab_cv:
         x=auc_data["단계"], y=auc_data["AUC"],
         marker_color=auc_data["색상"].tolist(),
         text=[f"{v:.3f}" for v in auc_data["AUC"]],
-        textposition="outside", textfont=dict(size=16, color="#1B4F72"),
+        textposition="outside", textfont=dict(size=16, color="#2C3E50"),
     ))
     fig_auc.add_hline(y=0.5, line_dash="dash", line_color="#E74C3C",
                       annotation_text="무작위 기준선 (0.5)", annotation_position="top left")
@@ -1413,9 +1426,9 @@ with tab_cv:
     st.plotly_chart(fig_auc, use_container_width=True)
 
     st.markdown(
-        '<div style="background:linear-gradient(135deg,#EBF5FB,#D4EFDF);padding:14px 18px;'
+        '<div style="background:linear-gradient(135deg,#FEF9E7,#FDEBD0);padding:14px 18px;'
         'border-radius:10px;border-left:4px solid #27AE60;margin-bottom:16px;">'
-        '<b style="color:#1B4F72;">핵심 발견:</b> '
+        '<b style="color:#2C3E50;">핵심 발견:</b> '
         f'도로 구조만으로는 AUC {struct_auc:.3f}로 제한적이며, '
         f'구조 위험도를 시설 데이터에 직접 적용하면 AUC {extern_auc:.3f}로 오히려 하락합니다. '
         f'그러나 <b>구조 + 9개 시설 + 어린이비율</b>을 통합하면 3-class AUC <b>{integ_auc:.3f}</b>으로 '
@@ -1429,7 +1442,7 @@ with tab_cv:
     # ── (b) 통합 모델 계수 해석 차트 ──
     st.markdown("##### 통합 모델 변수 계수 해석")
     coef_sorted = integ_coef.sort_values("계수")
-    coef_colors = ["#E74C3C" if c > 0 else "#2E86C1" for c in coef_sorted["계수"]]
+    coef_colors = ["#E74C3C" if c > 0 else "#F39C12" for c in coef_sorted["계수"]]
 
     fig_coef = go.Figure()
     fig_coef.add_trace(go.Bar(
@@ -1464,9 +1477,9 @@ with tab_cv:
         )
     with cv_ins2:
         st.markdown(
-            '<div style="background:#EBF5FB;padding:12px 16px;border-radius:8px;'
-            'border-left:4px solid #2E86C1;">'
-            '<b style="color:#1B4F72;">보호 효과 (-) 변수</b><br>'
+            '<div style="background:#FEF9E7;padding:12px 16px;border-radius:8px;'
+            'border-left:4px solid #F39C12;">'
+            '<b style="color:#2C3E50;">보호 효과 (-) 변수</b><br>'
             '<span style="font-size:13px;color:#2C3E50;">'
             + "<br>".join(f"{r['변수']}: {r['계수']:+.3f}" for _, r in neg_vars.iterrows())
             + '<br><br>예방적 시설의 사고 억제 효과</span></div>',
@@ -1516,7 +1529,7 @@ with tab_cv:
             x="등급", y="값", color="특성", barmode="group",
             title="등급별 도로폭 vs 분리장치 확률",
             color_discrete_map={
-                "넓은 도로 확률": "#E74C3C", "분리장치 확률": "#2E86C1",
+                "넓은 도로 확률": "#E74C3C", "분리장치 확률": "#F39C12",
             },
         )
         fig_cv_grade.update_layout(**PLOTLY_LAYOUT, height=380)
@@ -1549,20 +1562,20 @@ with tab_cv:
                 theta=cv_theta,
                 fill="toself", name=selected_school,
                 fillcolor="rgba(108,52,131,0.2)",
-                line=dict(color="#6C3483", width=2),
+                line=dict(color="#E67E22", width=2),
             ))
             fig_cv_radar.add_trace(go.Scatterpolar(
                 r=cv_avg_vals + [cv_avg_vals[0]],
                 theta=cv_theta,
                 fill="toself", name="전체 평균",
                 fillcolor="rgba(46,134,193,0.1)",
-                line=dict(color="#2E86C1", width=1, dash="dash"),
+                line=dict(color="#F39C12", width=1, dash="dash"),
             ))
             fig_cv_radar.update_layout(
                 **PLOTLY_LAYOUT,
                 polar=dict(
-                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#E8DAEF"),
-                    angularaxis=dict(gridcolor="#E8DAEF"),
+                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#FDEBD0"),
+                    angularaxis=dict(gridcolor="#FDEBD0"),
                     bgcolor="#FAFCFF",
                 ),
                 title=f"{selected_school} 도로환경 프로필",
@@ -1608,8 +1621,8 @@ with tab_cv:
                     )
                 st.markdown(
                     f'<div style="background:#FAFCFF;padding:14px 16px;border-radius:10px;'
-                    f'border:1px solid #D6EAF8;">'
-                    f'<div style="font-weight:700;color:#1B4F72;margin-bottom:10px;font-size:14px;">'
+                    f'border:1px solid #F5CBA7;">'
+                    f'<div style="font-weight:700;color:#2C3E50;margin-bottom:10px;font-size:14px;">'
                     f'CV 분석 지표</div>{_gauge_html}</div>',
                     unsafe_allow_html=True,
                 )
@@ -1651,8 +1664,8 @@ with tab_cv:
 
         else:
             st.markdown(
-                "<div style='background:#F5EEF8;padding:20px;border-radius:8px;"
-                "text-align:center;color:#6C3483;margin-top:40px;'>"
+                "<div style='background:#FEF9E7;padding:20px;border-radius:8px;"
+                "text-align:center;color:#E67E22;margin-top:40px;'>"
                 "사이드바에서 개별 시설을 선택하면<br>도로환경 레이더 차트와 로드뷰 이미지가 표시됩니다."
                 "</div>",
                 unsafe_allow_html=True,
@@ -1744,7 +1757,7 @@ with tab_district:
         title="성남시 행정동별 어린이(0~14세) 비율",
         labels={"어린이_비율": "어린이 비율 (%)", "동명": ""},
         color="어린이_비율",
-        color_continuous_scale=[[0, "#D6EAF8"], [0.5, "#5DADE2"], [1, "#1B4F72"]],
+        color_continuous_scale=[[0, "#FEF9E7"], [0.5, "#F39C12"], [1, "#E67E22"]],
     )
     fig_pop.update_layout(**PLOTLY_LAYOUT, height=900, coloraxis_showscale=False)
     st.plotly_chart(fig_pop, use_container_width=True)
@@ -1754,8 +1767,8 @@ with tab_district:
     fig_trend.add_trace(go.Scatter(
         x=nat_df["발생년"], y=nat_df["사고건수"],
         mode="lines+markers", name="사고건수",
-        line=dict(color="#1B4F72", width=3),
-        marker=dict(size=9, color="#1B4F72"),
+        line=dict(color="#2C3E50", width=3),
+        marker=dict(size=9, color="#2C3E50"),
     ))
     fig_trend.add_trace(go.Scatter(
         x=nat_df["발생년"], y=nat_df["사망자수"],
@@ -1775,7 +1788,7 @@ with tab_district:
         ),
         height=400,
         legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)",
-                    bordercolor="#D6EAF8", borderwidth=1),
+                    bordercolor="#F5CBA7", borderwidth=1),
     )
     st.plotly_chart(fig_trend, use_container_width=True)
 
@@ -1796,7 +1809,7 @@ with tab_district:
             orientation="h", barmode="group",
             title="성남 인근 주요 국도 등하교 시간대 평균 교통량",
             labels={"평균교통량": "평균 교통량 (대)", "호선명": "", "시간대": ""},
-            color_discrete_map={"등교": "#1B4F72", "하교": "#5DADE2"},
+            color_discrete_map={"등교": "#E67E22", "하교": "#F1C40F"},
         )
         fig_traffic.update_layout(**PLOTLY_LAYOUT, height=350)
         st.plotly_chart(fig_traffic, use_container_width=True)
@@ -1872,7 +1885,7 @@ with tab_sim:
     gm_k4.metric("모델 R²", f"{model_r2:.3f}")
 
     # ── (b) 광명 지도 ──
-    GS_GRADE_COLORS = {"A": "#154360", "B": "#2471A3", "C": "#85C1E9", "D": "#E74C3C"}
+    GS_GRADE_COLORS = {"A": "#27AE60", "B": "#F1C40F", "C": "#E67E22", "D": "#E74C3C"}
     gm_map = folium.Map(
         location=[gm_df["위도"].mean(), gm_df["경도"].mean()],
         zoom_start=13, tiles="cartodbpositron",
@@ -1985,14 +1998,14 @@ with tab_method:
     # ── (a) 프로젝트 개요 ──
     st.markdown("##### 프로젝트 개요")
     st.markdown(
-        '<div style="background:#F0F6FC;padding:16px 20px;border-radius:10px;'
-        'border-left:4px solid #1B4F72;margin-bottom:16px;">'
+        '<div style="background:#FEF5E7;padding:16px 20px;border-radius:10px;'
+        'border-left:4px solid #E67E22;margin-bottom:16px;">'
         '<span style="font-size:14px;color:#2C3E50;">'
-        '<b style="color:#1B4F72;">목표:</b> 성남시 어린이 보호구역(스쿨존) 136개소의 '
+        '<b style="color:#2C3E50;">목표:</b> 성남시 어린이 보호구역(스쿨존) 136개소의 '
         '안전등급을 데이터 기반으로 분석하여, 시설물 투자 우선순위를 제공합니다.<br><br>'
-        '<b style="color:#1B4F72;">분석 대상:</b> 성남시·광명시 136개소<br>'
-        '<b style="color:#1B4F72;">분석 기간:</b> 2018~2023년 사고 데이터 + 2024년 시설 현황<br>'
-        '<b style="color:#1B4F72;">핵심 메시지:</b> 스쿨존 사고는 <b>도로 구조 + 정책(시설) + 노출(어린이)</b>의 결합 결과이며, '
+        '<b style="color:#2C3E50;">분석 대상:</b> 성남시·광명시 136개소<br>'
+        '<b style="color:#2C3E50;">분석 기간:</b> 2018~2023년 사고 데이터 + 2024년 시설 현황<br>'
+        '<b style="color:#2C3E50;">핵심 메시지:</b> 스쿨존 사고는 <b>도로 구조 + 정책(시설) + 노출(어린이)</b>의 결합 결과이며, '
         '시설물 투입이 사고 예방의 핵심이다.'
         '</span></div>',
         unsafe_allow_html=True,
@@ -2033,11 +2046,11 @@ with tab_method:
     # ── (c) 안전점수 계산 방법 ──
     st.markdown("##### 안전점수 계산 방법")
     st.markdown(
-        '<div style="background:#EBF5FB;padding:16px 20px;border-radius:10px;'
-        'border-left:4px solid #2E86C1;margin-bottom:12px;">'
-        '<b style="color:#1B4F72;font-size:15px;">안전점수 산출 공식</b><br><br>'
+        '<div style="background:#FEF9E7;padding:16px 20px;border-radius:10px;'
+        'border-left:4px solid #F39C12;margin-bottom:12px;">'
+        '<b style="color:#2C3E50;font-size:15px;">안전점수 산출 공식</b><br><br>'
         '<span style="font-size:14px;color:#2C3E50;">'
-        '<code style="background:#D6EAF8;padding:6px 12px;border-radius:6px;font-size:14px;">'
+        '<code style="background:#F5CBA7;padding:6px 12px;border-radius:6px;font-size:14px;">'
         '안전점수 = 기본(50) + 가산점(시설) + 가산점(보너스) - 감산점(사고+환경)'
         '</code><br><br>'
         '<b>가산점(시설):</b> 9개 시설물 보유량 기반 점수 (많을수록 가산)<br>'
@@ -2047,9 +2060,9 @@ with tab_method:
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<div style="background:#F0F6FC;padding:14px 18px;border-radius:10px;'
+        '<div style="background:#FEF5E7;padding:14px 18px;border-radius:10px;'
         'border-left:4px solid #154360;margin-bottom:16px;">'
-        '<b style="color:#1B4F72;">등급 기준 (사분위수)</b><br>'
+        '<b style="color:#2C3E50;">등급 기준 (사분위수)</b><br>'
         '<span style="font-size:13px;color:#2C3E50;">'
         '<b style="color:#154360;">A등급 (우수)</b>: 상위 25% &nbsp;&nbsp;|&nbsp;&nbsp; '
         '<b style="color:#2471A3;">B등급 (양호)</b>: 25~50% &nbsp;&nbsp;|&nbsp;&nbsp; '
@@ -2076,7 +2089,7 @@ with tab_method:
         '<b>Logistic Regression</b>'
         '</span></div>'
         # 화살표
-        '<div style="display:flex;align-items:center;font-size:24px;color:#1B4F72;">&#10132;</div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#2C3E50;">&#10132;</div>'
         # 2단계
         '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FDEDEC,#F9EBEA);'
         'padding:14px 16px;border-radius:10px;border-top:4px solid #E74C3C;">'
@@ -2087,9 +2100,9 @@ with tab_method:
         '<b>AUC 하락 확인</b>'
         '</span></div>'
         # 화살표
-        '<div style="display:flex;align-items:center;font-size:24px;color:#1B4F72;">&#10132;</div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#2C3E50;">&#10132;</div>'
         # 3단계
-        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#D4EFDF,#EAFAF1);'
+        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FDEBD0,#EAFAF1);'
         'padding:14px 16px;border-radius:10px;border-top:4px solid #27AE60;">'
         '<b style="color:#27AE60;font-size:15px;">3단계: 통합 모델</b><br>'
         '<span style="font-size:12px;color:#2C3E50;">'
@@ -2104,9 +2117,9 @@ with tab_method:
     _m_col1, _m_col2 = st.columns(2)
     with _m_col1:
         st.markdown(
-            '<div style="background:#F0F6FC;padding:12px 16px;border-radius:8px;'
-            'border-left:4px solid #2E86C1;">'
-            '<b style="color:#1B4F72;">3-class 라벨링 기준</b><br>'
+            '<div style="background:#FEF5E7;padding:12px 16px;border-radius:8px;'
+            'border-left:4px solid #F39C12;">'
+            '<b style="color:#2C3E50;">3-class 라벨링 기준</b><br>'
             '<span style="font-size:13px;color:#2C3E50;">'
             '사고 0건 → <b>안전</b> (82개소, 57.7%)<br>'
             '사고 1~6건 → <b>주의</b> (25개소, 17.6%)<br>'
@@ -2116,9 +2129,9 @@ with tab_method:
         )
     with _m_col2:
         st.markdown(
-            f'<div style="background:#D4EFDF;padding:12px 16px;border-radius:8px;'
+            f'<div style="background:#FDEBD0;padding:12px 16px;border-radius:8px;'
             f'border-left:4px solid #27AE60;">'
-            f'<b style="color:#1B4F72;">모델 성능</b><br>'
+            f'<b style="color:#2C3E50;">모델 성능</b><br>'
             f'<span style="font-size:13px;color:#2C3E50;">'
             f'1단계 구조 모델 AUC: <b>{struct_auc:.3f}</b><br>'
             f'3단계 통합 모델 AUC: <b>{integ_auc:.3f}</b><br>'
@@ -2152,24 +2165,24 @@ with tab_method:
     # ── (f) 데이터 출처 ──
     st.markdown("##### 데이터 출처")
     st.markdown(
-        '<div style="background:#F0F6FC;padding:16px 20px;border-radius:10px;">'
+        '<div style="background:#FEF5E7;padding:16px 20px;border-radius:10px;">'
         '<table style="width:100%;font-size:13px;color:#2C3E50;border-collapse:collapse;">'
-        '<tr style="background:#D6EAF8;font-weight:600;color:#1B4F72;">'
+        '<tr style="background:#F5CBA7;font-weight:600;color:#2C3E50;">'
         '<td style="padding:8px 12px;">출처</td>'
         '<td style="padding:8px 12px;">데이터 내용</td>'
         '<td style="padding:8px 12px;">기간</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">공공데이터포털</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">스쿨존 목록, 9개 시설물 현황</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2024</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">도로교통공단</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">어린이보호구역 교통사고 통계</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2018~2023</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">경기데이터드림</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">행정동별 연령별 인구 (어린이비율)</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2024</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">성남시</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">광명시 어린이보호구역 시설물·사고 데이터</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #D6EAF8;">2024</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">공공데이터포털</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">스쿨존 목록, 9개 시설물 현황</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">도로교통공단</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">어린이보호구역 교통사고 통계</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2018~2023</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">경기데이터드림</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">행정동별 연령별 인구 (어린이비율)</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">성남시</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">광명시 어린이보호구역 시설물·사고 데이터</td>'
+        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
         '<tr><td style="padding:6px 12px;">카카오맵 로드뷰</td>'
         '<td style="padding:6px 12px;">스쿨존 도로환경 이미지 (CV 분석용)</td>'
         '<td style="padding:6px 12px;">2023~2024</td></tr>'
