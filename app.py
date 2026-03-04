@@ -481,7 +481,7 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
             choropleth_data = pop_df[["구명", "동명", "어린이_비율"]].copy()
             choropleth_data["adm_nm"] = "경기도 성남시" + choropleth_data["구명"] + " " + choropleth_data["동명"]
         else:
-            choropleth_data = pop_df[["동명", "어린이_비율"]].copy()
+            choropleth_data = pop_df[["동명", "어린이_비율"]].dropna(subset=["어린이_비율"]).copy()
             choropleth_data["adm_nm"] = "경기도 광명시 " + choropleth_data["동명"]
         folium.Choropleth(
             geo_data=geo,
@@ -493,6 +493,23 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
             line_opacity=0.4,
             legend_name="어린이 비율 (%)",
             name="행정동 경계",
+        ).add_to(m)
+
+        # 행정동 경계선 + 동명 라벨 (별도 레이어)
+        folium.GeoJson(
+            geo,
+            name="행정동 구분선",
+            style_function=lambda _: {
+                "fillOpacity": 0,
+                "color": "#2C3E50",
+                "weight": 2,
+                "dashArray": "5,3",
+            },
+            tooltip=folium.GeoJsonTooltip(
+                fields=["adm_nm"],
+                aliases=["행정동"],
+                style="font-size:12px;font-weight:600;",
+            ),
         ).add_to(m)
 
     for _, row in filtered_df.iterrows():
