@@ -1517,6 +1517,9 @@ with tab_facility:
 # ============================
 # Tab 4: 도로환경 (CV)
 # ============================
+# 구조 모델 (CV탭 + 방법론탭에서 사용)
+_struct_model, struct_auc, _fac_risk_cv = train_structure_model()
+
 with tab_cv:
     if selected_city == "광명시":
         st.markdown("### 캡스톤 연구: 3단계 사고 예측 모델")
