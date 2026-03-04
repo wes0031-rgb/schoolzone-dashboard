@@ -213,6 +213,8 @@ def load_gwangmyung():
         "어린이 총인구": "어린이인구_0_14",
         "동": "행정동",
     })
+    if "도로안전표지" not in _gm.columns:
+        _gm["도로안전표지"] = 0
     if "시설유형" not in _gm.columns:
         _gm["시설유형"] = "초등학교"
     if "구" not in _gm.columns:
