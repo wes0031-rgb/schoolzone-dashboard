@@ -252,7 +252,10 @@ def train_structure_model():
     from sklearn.model_selection import cross_val_score
 
     img_df = load_accident_images()
-    img_df["accident_label"] = img_df["image"].str.contains("부근").astype(int)
+    # accident_label이 데이터에 이미 포함된 경우 사용, 없으면 파일명 기반 추론
+    if "accident_label" not in img_df.columns:
+        img_df["accident_label"] = img_df["image"].str.contains("부근").astype(int)
+    img_df["accident_label"] = img_df["accident_label"].astype(int)
 
     feat_cols = ["p_wide", "p_barrier_yes", "road_width_relative",
                  "sidewalk_ratio", "parked_density"]
