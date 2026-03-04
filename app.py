@@ -348,20 +348,36 @@ def make_popup(row):
 
 
 def create_legend_html():
-    items = "".join(
-        f'<li style="margin:3px 0;"><span style="background:{GRADE_COLORS[g]};width:14px;height:14px;'
-        f'display:inline-block;border-radius:50%;margin-right:8px;vertical-align:middle;'
+    grade_items = "".join(
+        f'<li style="margin:3px 0;"><span style="background:{GRADE_COLORS[g]};width:12px;height:12px;'
+        f'display:inline-block;border-radius:50%;margin-right:6px;vertical-align:middle;'
         f'box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>'
         f'<span style="vertical-align:middle;">{GRADE_LABELS[g]}</span></li>'
         for g in ["A", "B", "C", "D"]
     )
+    layer_colors = [
+        ("green", "지킴이집"), ("#E74C3C", "사고다발지"),
+        ("#8E44AD", "CCTV"), ("#2980B9", "단속카메라"),
+        ("#F39C12", "안전표지"), ("#E74C3C", "적색표면"),
+        ("#27AE60", "신호등"), ("#3498DB", "횡단보도"),
+        ("#E67E22", "보호구역표지판"), ("#F1C40F", "옐로카펫"),
+        ("#95A5A6", "펜스"),
+    ]
+    layer_items = "".join(
+        f'<li style="margin:2px 0;"><span style="background:{c};width:10px;height:10px;'
+        f'display:inline-block;border-radius:50%;margin-right:6px;vertical-align:middle;"></span>'
+        f'<span style="vertical-align:middle;font-size:11px;">{n}</span></li>'
+        for c, n in layer_colors
+    )
     return f"""
     <div style="position:fixed;bottom:30px;right:30px;z-index:1000;
-         background:white;padding:14px 18px;border-radius:10px;
-         box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:13px;
-         font-family:'Noto Sans KR',sans-serif;border:1px solid #D6EAF8;">
-      <div style="font-weight:700;color:#1B4F72;margin-bottom:6px;">안전등급</div>
-      <ul style="list-style:none;padding:0;margin:0;">{items}</ul>
+         background:white;padding:12px 16px;border-radius:10px;
+         box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px;
+         font-family:'Noto Sans KR',sans-serif;border:1px solid #D6EAF8;max-height:380px;overflow-y:auto;">
+      <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">안전등급</div>
+      <ul style="list-style:none;padding:0;margin:0 0 6px 0;">{grade_items}</ul>
+      <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;border-top:1px solid #D6EAF8;padding-top:6px;">시설물 레이어</div>
+      <ul style="list-style:none;padding:0;margin:0;">{layer_items}</ul>
     </div>
     """
 
@@ -772,6 +788,32 @@ with tab_map:
             unsafe_allow_html=True,
         )
 
+    # ── D등급 시설 부족 우선순위 테이블 ──
+    if len(d_grade) > 0:
+        _a_avg = df[df["등급"] == "A"][FACILITY_COLS].mean()
+        _priority_rows = []
+        for _, _dr in d_grade.sort_values("활성_안전점수").iterrows():
+            _gaps = {}
+            for _fc in FACILITY_COLS:
+                _need = max(0, round(_a_avg[_fc] - _dr[_fc], 1))
+                if _need > 0:
+                    _gaps[_fc] = _need
+            _top3 = sorted(_gaps.items(), key=lambda x: -x[1])[:3]
+            _priority_rows.append({
+                "시설물명": _dr["시설물명"],
+                "구": _dr["구"],
+                "안전점수": round(_dr["활성_안전점수"], 1),
+                "1순위 보강": f"{_top3[0][0]} (+{_top3[0][1]:.0f})" if len(_top3) > 0 else "-",
+                "2순위 보강": f"{_top3[1][0]} (+{_top3[1][1]:.0f})" if len(_top3) > 1 else "-",
+                "3순위 보강": f"{_top3[2][0]} (+{_top3[2][1]:.0f})" if len(_top3) > 2 else "-",
+            })
+        with st.expander(f"D등급 시설 보강 우선순위 ({len(d_grade)}개소)", expanded=False):
+            st.caption("A등급 평균 대비 부족한 시설을 우선순위별로 표시합니다.")
+            st.dataframe(
+                pd.DataFrame(_priority_rows),
+                use_container_width=True, hide_index=True,
+            )
+
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     pop_df = load_population()
     geo = load_geojson()
@@ -1049,10 +1091,14 @@ with tab_facility:
 
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
-    # ── (b) 구별 시설 보유 현황 (Stacked Bar) ──
-    st.markdown("##### 구별 시설 보유 현황")
+    # ── (b) 구별 시설 보유 현황 (Stacked Bar) — 성남 3구 + 광명 ──
+    st.markdown("##### 구별 시설 보유 현황 (성남 + 광명)")
     _gu_fac = df.groupby("구")[FACILITY_COLS].sum().reset_index()
-    _gu_fac_melt = _gu_fac.melt(id_vars="구", var_name="시설종류", value_name="수량")
+    _gm_df = load_gwangmyung()
+    _gm_fac = _gm_df[FACILITY_COLS].sum().to_frame().T
+    _gm_fac.insert(0, "구", "광명시")
+    _gu_fac_all = pd.concat([_gu_fac, _gm_fac], ignore_index=True)
+    _gu_fac_melt = _gu_fac_all.melt(id_vars="구", var_name="시설종류", value_name="수량")
     fig_gu_fac = px.bar(
         _gu_fac_melt, x="구", y="수량", color="시설종류",
         barmode="stack",
@@ -1061,19 +1107,40 @@ with tab_facility:
     )
     fig_gu_fac.update_layout(**PLOTLY_LAYOUT, height=450)
     st.plotly_chart(fig_gu_fac, use_container_width=True)
+    st.caption("※ 광명시: 도로안전표지·생활안전CCTV·무인교통단속카메라·보호구역표지판 데이터 미수집 (0 표시)")
 
-    # ── (b-2) 구별 등급 분포 파이차트 ──
+    # ── (b-2) 구별 등급 분포 파이차트 (성남 + 광명) ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 구별 안전등급 분포")
+    st.markdown("##### 구별 안전등급 분포 (성남 + 광명)")
+
+    # 광명 예측 등급 생성
+    _safety_m, _safety_feat, _safety_r2 = train_safety_model()
+    _gm_grades = []
+    for _, _gm_r in _gm_df.iterrows():
+        _gm_vals = [int(_gm_r[f]) if pd.notna(_gm_r.get(f)) else 0 for f in _safety_feat]
+        _gm_score = float(_safety_m.predict([_gm_vals])[0])
+        if _gm_score >= 70:
+            _gm_grades.append("A")
+        elif _gm_score >= 55:
+            _gm_grades.append("B")
+        elif _gm_score >= 40:
+            _gm_grades.append("C")
+        else:
+            _gm_grades.append("D")
+    _gm_grade_df = pd.DataFrame({"구": "광명시", "등급": _gm_grades})
+
     _gu_grade = df.groupby(["구", "등급"]).size().reset_index(name="개소")
-    _gu_list = sorted(df["구"].dropna().unique().tolist())
+    _gm_gu_grade = _gm_grade_df.groupby(["구", "등급"]).size().reset_index(name="개소")
+    _gu_grade_all = pd.concat([_gu_grade, _gm_gu_grade], ignore_index=True)
+    _gu_list = sorted(df["구"].dropna().unique().tolist()) + ["광명시"]
     _pie_cols = st.columns(len(_gu_list))
     for _pi, _gu_name in enumerate(_gu_list):
         with _pie_cols[_pi]:
-            _gu_sub = _gu_grade[_gu_grade["구"] == _gu_name]
+            _gu_sub = _gu_grade_all[_gu_grade_all["구"] == _gu_name]
+            _title = f"{_gu_name}" + (" (예측)" if _gu_name == "광명시" else "")
             fig_pie = px.pie(
                 _gu_sub, values="개소", names="등급",
-                title=f"{_gu_name}",
+                title=_title,
                 color="등급",
                 color_discrete_map={g: GRADE_COLORS[g] for g in ["A", "B", "C", "D"]},
                 category_orders={"등급": ["A", "B", "C", "D"]},
@@ -1100,6 +1167,23 @@ with tab_facility:
     )
     fig_grade_fac.update_layout(**PLOTLY_LAYOUT, height=450)
     st.plotly_chart(fig_grade_fac, use_container_width=True)
+
+    # ── (c-2) 성남 vs 광명 교당 평균 시설 비교 ──
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+    st.markdown("##### 성남 vs 광명 교당 평균 시설 수")
+    _sn_avg = df[FACILITY_COLS].mean().rename("성남시")
+    _gm_avg = _gm_df[FACILITY_COLS].mean().rename("광명시")
+    _cmp = pd.DataFrame({"성남시": _sn_avg, "광명시": _gm_avg}).reset_index()
+    _cmp.columns = ["시설종류", "성남시", "광명시"]
+    _cmp_melt = _cmp.melt(id_vars="시설종류", var_name="지역", value_name="교당 평균")
+    fig_cmp = px.bar(
+        _cmp_melt, x="시설종류", y="교당 평균", color="지역",
+        barmode="group", title="성남 vs 광명 — 교당 평균 시설 수 비교",
+        color_discrete_map={"성남시": "#1B4F72", "광명시": "#E67E22"},
+    )
+    fig_cmp.update_layout(**PLOTLY_LAYOUT, height=400)
+    st.plotly_chart(fig_cmp, use_container_width=True)
+    st.caption("※ 광명시 도로안전표지·생활안전CCTV·무인교통단속카메라·보호구역표지판은 데이터 미수집으로 0 표시")
 
     # 인사이트 카드: A등급 vs D등급 시설 격차
     _a_fac_avg = df[df["등급"] == "A"][FACILITY_COLS].mean()
