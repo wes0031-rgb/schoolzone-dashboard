@@ -2006,7 +2006,7 @@ with tab_sim:
     # ── (b) 광명 지도 ──
     GS_GRADE_COLORS = {"A": "#27AE60", "B": "#F1C40F", "C": "#E67E22", "D": "#E74C3C"}
     gm_map = folium.Map(
-        location=[gm_df["위도"].mean(), gm_df["경도"].mean()],
+        location=[df_gm["위도"].mean(), df_gm["경도"].mean()],
         zoom_start=13, tiles=None,
     )
     folium.TileLayer(
