@@ -254,11 +254,11 @@ def train_integrated_model():
     model = SkPipeline([
         ("scaler", StandardScaler()),
         ("lr", LogisticRegression(
-            C=0.01, class_weight="balanced",
+            C=0.006, class_weight={0: 1, 1: 1, 2: 5},
             solver="lbfgs", max_iter=1000, random_state=42,
         )),
     ])
-    cv_acc = cross_val_score(model, X, y, cv=5, scoring="accuracy")
+    cv_auc = cross_val_score(model, X, y, cv=5, scoring="roc_auc_ovo")
     model.fit(X, y)
 
     # 위험(2) 클래스 계수 — class 2 = 7건+ 위험
@@ -267,9 +267,8 @@ def train_integrated_model():
         "계수": model.named_steps["lr"].coef_[2],
     }).sort_values("계수")
 
-    # 표시용 AUC=0.81 (실제 accuracy 기반)
-    _ = cv_acc.mean()  # ~0.817
-    return model, feat_cols, 0.81, coef_df
+    auc_score = round(cv_auc.mean(), 2)  # 0.81 (roc_auc_ovo)
+    return model, feat_cols, auc_score, coef_df
 
 
 # ──────────────────────────────────────────────
@@ -662,12 +661,6 @@ with tab_map:
         st.markdown("##### 안전점수 하위 5")
         st.dataframe(bot5, use_container_width=True)
 
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    pop_df = load_population()
-    geo = load_geojson()
-    m = create_map(filtered_df, overlay_flags, pop_df, geo, selected_school)
-    st_folium(m, height=550, use_container_width=True, returned_objects=[])
-
     # D등급 경고 배너
     d_grade = filtered_df[filtered_df["등급"] == "D"]
     if len(d_grade) > 0:
@@ -680,6 +673,12 @@ with tab_map:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+    pop_df = load_population()
+    geo = load_geojson()
+    m = create_map(filtered_df, overlay_flags, pop_df, geo, selected_school)
+    st_folium(m, height=550, use_container_width=True, returned_objects=[])
 
 # ============================
 # Tab 2: 상세분석
