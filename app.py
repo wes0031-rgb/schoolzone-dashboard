@@ -418,9 +418,8 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
             zoom = 15
     m = folium.Map(location=center, zoom_start=zoom, tiles=None)
     folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-        attr='&copy; <a href="https://carto.com/">CARTO</a>',
-        name="기본 지도", max_zoom=19,
+        tiles="https://mt0.google.com/vt/lyrs=r&hl=ko&x={x}&y={y}&z={z}",
+        attr="Google", name="기본 지도", max_zoom=22,
     ).add_to(m)
 
     if geo and geo.get("features"):
@@ -1908,9 +1907,8 @@ with tab_sim:
         zoom_start=13, tiles=None,
     )
     folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-        attr='&copy; <a href="https://carto.com/">CARTO</a>',
-        name="기본 지도", max_zoom=19,
+        tiles="https://mt0.google.com/vt/lyrs=r&hl=ko&x={x}&y={y}&z={z}",
+        attr="Google", name="기본 지도", max_zoom=22,
     ).add_to(gm_map)
     for _, gm_r in gm_result.iterrows():
         gm_color = GS_GRADE_COLORS.get(gm_r["예상등급"], "#999")
