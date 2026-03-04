@@ -142,6 +142,31 @@ def load_signs():
 
 
 @st.cache_data
+def load_red_surface():
+    return pd.read_csv(DATA_DIR / "도로적색표면_전처리1.csv", encoding="utf-8-sig")
+
+@st.cache_data
+def load_traffic_lights():
+    return pd.read_csv(DATA_DIR / "신호등_전처리1.csv", encoding="utf-8-sig")
+
+@st.cache_data
+def load_crosswalks():
+    return pd.read_csv(DATA_DIR / "횡단보도_전처리1.csv", encoding="utf-8-sig")
+
+@st.cache_data
+def load_zone_signs():
+    return pd.read_csv(DATA_DIR / "보호구역표지판_전처리1.csv", encoding="utf-8-sig")
+
+@st.cache_data
+def load_yellow_carpet():
+    return pd.read_csv(DATA_DIR / "옐로카펫_전처리1.csv", encoding="utf-8-sig")
+
+@st.cache_data
+def load_fences():
+    return pd.read_csv(DATA_DIR / "무단횡단방지펜스_전처리1.csv", encoding="utf-8-sig")
+
+
+@st.cache_data
 def load_population():
     return pd.read_csv(DATA_DIR / "연령별인구_성남시_행정동.csv", encoding="utf-8-sig")
 
@@ -439,6 +464,70 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
             }""",
         ).add_to(m)
 
+    if overlay_flags.get("적색표면"):
+        _rs = load_red_surface().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_rs[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:3, color:'#E74C3C', fillColor:'#E74C3C', fill:true, fillOpacity:0.5});
+                m.bindTooltip('도로적색표면'); return m;
+            }""",
+        ).add_to(m)
+
+    if overlay_flags.get("신호등"):
+        _tl = load_traffic_lights().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_tl[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:3, color:'#27AE60', fillColor:'#27AE60', fill:true, fillOpacity:0.5});
+                m.bindTooltip('신호등'); return m;
+            }""",
+        ).add_to(m)
+
+    if overlay_flags.get("횡단보도"):
+        _cw = load_crosswalks().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_cw[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:3, color:'#3498DB', fillColor:'#3498DB', fill:true, fillOpacity:0.5});
+                m.bindTooltip('횡단보도'); return m;
+            }""",
+        ).add_to(m)
+
+    if overlay_flags.get("보호구역표지판"):
+        _zs = load_zone_signs().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_zs[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:3, color:'#E67E22', fillColor:'#E67E22', fill:true, fillOpacity:0.5});
+                m.bindTooltip('보호구역표지판'); return m;
+            }""",
+        ).add_to(m)
+
+    if overlay_flags.get("옐로카펫"):
+        _yc = load_yellow_carpet().dropna(subset=["위도", "경도"])
+        for _, r in _yc.iterrows():
+            folium.CircleMarker(
+                [r["위도"], r["경도"]], radius=5,
+                color="#F1C40F", fill=True, fill_color="#F1C40F", fill_opacity=0.8,
+                tooltip=f"옐로카펫: {r.get('시설물명', '')}",
+            ).add_to(m)
+
+    if overlay_flags.get("펜스"):
+        _fn = load_fences().dropna(subset=["위도", "경도"])
+        FastMarkerCluster(
+            data=_fn[["위도", "경도"]].values.tolist(),
+            callback="""function(row) {
+                var m = L.circleMarker(new L.LatLng(row[0], row[1]),
+                    {radius:3, color:'#95A5A6', fillColor:'#95A5A6', fill:true, fillOpacity:0.5});
+                m.bindTooltip('무단횡단방지펜스'); return m;
+            }""",
+        ).add_to(m)
+
     m.get_root().html.add_child(folium.Element(create_legend_html()))
     return m
 
@@ -514,9 +603,18 @@ ov_accident = st.sidebar.checkbox("사고다발지", value=True)
 ov_cctv = st.sidebar.checkbox("생활안전 CCTV", value=False)
 ov_camera = st.sidebar.checkbox("무인교통단속카메라", value=False)
 ov_sign = st.sidebar.checkbox("도로안전표지", value=False)
+ov_red_surface = st.sidebar.checkbox("도로적색표면", value=False)
+ov_traffic_light = st.sidebar.checkbox("신호등", value=False)
+ov_crosswalk = st.sidebar.checkbox("횡단보도", value=False)
+ov_zone_sign = st.sidebar.checkbox("보호구역표지판", value=False)
+ov_yellow_carpet = st.sidebar.checkbox("옐로카펫", value=False)
+ov_fence = st.sidebar.checkbox("무단횡단방지펜스", value=False)
 overlay_flags = {
     "지킴이집": ov_guardhouse, "사고다발지": ov_accident,
     "CCTV": ov_cctv, "카메라": ov_camera, "표지판": ov_sign,
+    "적색표면": ov_red_surface, "신호등": ov_traffic_light,
+    "횡단보도": ov_crosswalk, "보호구역표지판": ov_zone_sign,
+    "옐로카펫": ov_yellow_carpet, "펜스": ov_fence,
 }
 
 # CSV 다운로드
