@@ -1042,7 +1042,10 @@ with tab_map:
                 text="평균",
             )
             fig_struct.update_traces(texttemplate="%{text:.1f}", textposition="outside")
-            fig_struct.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
+            _y_max = score_struct["평균"].max() * 1.25
+            _y_min = score_struct["평균"].min() * 1.25
+            fig_struct.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False,
+                                     yaxis=dict(range=[_y_min, _y_max]))
             st.plotly_chart(fig_struct, use_container_width=True)
         elif selected_city == "광명시":
             st.markdown("##### 안전점수 개요")
