@@ -718,7 +718,7 @@ for _fc in ["보호구역표지판", "옐로카펫", "무단횡단방지펜스"]
     if _fc in df_sn.columns:
         df_sn[_fc] = df_sn[_fc].fillna(0)
 
-_, _, _fac_risk = train_structure_model()
+_, struct_auc, _fac_risk = train_structure_model()
 df_sn = df_sn.merge(_fac_risk, on="시설물명", how="left")
 df_sn["structure_risk"] = df_sn["structure_risk"].fillna(df_sn["structure_risk"].median())
 
@@ -1170,36 +1170,6 @@ with _sub_all:
     fig_type.update_layout(**PLOTLY_LAYOUT, height=280, coloraxis_showscale=False)
     st.plotly_chart(fig_type, use_container_width=True)
 
-    # ── D등급 개선 제안 ──
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 주의 필요 시설 (D등급)")
-    low_facilities = filtered_df[filtered_df["등급"] == "D"].sort_values("활성_안전점수")
-    if len(low_facilities) > 0:
-        for _, row in low_facilities.iterrows():
-            grade_color = GRADE_COLORS["D"]
-            # 가장 부족한 시설 찾기
-            worst = None
-            worst_pct = 1.0
-            for f in FACILITY_COLS:
-                mx = df[f].max()
-                if mx > 0:
-                    pct = row[f] / mx
-                    if pct < worst_pct:
-                        worst_pct = pct
-                        worst = f
-            suggestion = f"{worst} 보강 필요 (현재 {int(row[worst])}개)" if worst else "추가 분석 필요"
-            st.markdown(
-                f'<div class="suggestion-card">'
-                f'<span class="school-name">{row["시설물명"]}</span> '
-                f'<span style="font-size:11px;color:#34495E;">({row["시설유형"]})</span> &nbsp; '
-                f'<span style="background:{grade_color};color:#fff;padding:2px 10px;'
-                f'border-radius:20px;font-size:11px;">D ({row["활성_안전점수"]:.1f}점)</span>'
-                f'<div class="suggestion">개선 제안: {suggestion}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-    else:
-        st.success("모든 시설이 양호한 상태입니다.")
 
 
 with _sub_indiv:
@@ -1249,22 +1219,30 @@ with _sub_indiv:
 
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
-        # ── 레이더 차트 ──
-        radar_feats = FACILITY_COLS
-        radar_labels = radar_feats.copy()
-        vals = []
-        for f in radar_feats:
-            mx = df[f].max()
-            vals.append(school_row[f] / mx * 100 if mx > 0 else 0)
-        vals.append(vals[0])
-        radar_labels_closed = radar_labels + [radar_labels[0]]
+        # ── 레이더 차트 (A등급 평균 비교 포함) ──
+        _a_avg_r = df[df["등급"] == "A"][FACILITY_COLS].mean()
+        _radar_vals = []
+        _radar_a_vals = []
+        for _fc in FACILITY_COLS:
+            _mx = df[_fc].max()
+            _radar_vals.append(school_row[_fc] / _mx * 100 if _mx > 0 else 0)
+            _radar_a_vals.append(_a_avg_r[_fc] / _mx * 100 if _mx > 0 else 0)
+        _theta = FACILITY_COLS + [FACILITY_COLS[0]]
 
         fig_radar = go.Figure()
         fig_radar.add_trace(go.Scatterpolar(
-            r=vals, theta=radar_labels_closed,
+            r=_radar_vals + [_radar_vals[0]],
+            theta=_theta,
             fill="toself", name=selected_school,
-            fillcolor="rgba(46,134,193,0.2)",
+            fillcolor="rgba(27,79,114,0.2)",
             line=dict(color="#2C3E50", width=2),
+        ))
+        fig_radar.add_trace(go.Scatterpolar(
+            r=_radar_a_vals + [_radar_a_vals[0]],
+            theta=_theta,
+            fill="toself", name="A등급 평균",
+            fillcolor="rgba(39,174,96,0.1)",
+            line=dict(color="#27AE60", width=1, dash="dash"),
         ))
         fig_radar.update_layout(
             **PLOTLY_LAYOUT,
@@ -1273,8 +1251,9 @@ with _sub_indiv:
                 angularaxis=dict(gridcolor="#F5CBA7"),
                 bgcolor="#FAFCFF",
             ),
-            title=f"{selected_school} 시설물 현황",
-            height=420, showlegend=False,
+            title=f"{selected_school} 시설물 현황 vs A등급 평균",
+            height=420, showlegend=True,
+            legend=dict(x=0.01, y=0.99),
         )
         st.plotly_chart(fig_radar, use_container_width=True)
 
@@ -1563,72 +1542,11 @@ with tab_facility:
         _rank_df.index = _rank_df.index + 1
         st.dataframe(_rank_df, use_container_width=True)
 
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (f) 개별 학교 시설 레이더 차트 ──
-    st.markdown("##### 개별 시설 레이더 차트")
-
-    if selected_school != "(전체)":
-        _sel_r = df[df["시설물명"] == selected_school]
-        if len(_sel_r) > 0:
-            _sel_r = _sel_r.iloc[0]
-            _a_avg_r = df[df["등급"] == "A"][FACILITY_COLS].mean()
-
-            # 정규화 (max 기준 0~100)
-            _radar_vals = []
-            _radar_a_vals = []
-            for _fc in FACILITY_COLS:
-                _mx = df[_fc].max()
-                _radar_vals.append(_sel_r[_fc] / _mx * 100 if _mx > 0 else 0)
-                _radar_a_vals.append(_a_avg_r[_fc] / _mx * 100 if _mx > 0 else 0)
-
-            _theta = FACILITY_COLS + [FACILITY_COLS[0]]
-
-            fig_fac_radar = go.Figure()
-            fig_fac_radar.add_trace(go.Scatterpolar(
-                r=_radar_vals + [_radar_vals[0]],
-                theta=_theta,
-                fill="toself", name=selected_school,
-                fillcolor="rgba(27,79,114,0.2)",
-                line=dict(color="#2C3E50", width=2),
-            ))
-            fig_fac_radar.add_trace(go.Scatterpolar(
-                r=_radar_a_vals + [_radar_a_vals[0]],
-                theta=_theta,
-                fill="toself", name="A등급 평균",
-                fillcolor="rgba(39,174,96,0.1)",
-                line=dict(color="#27AE60", width=1, dash="dash"),
-            ))
-            fig_fac_radar.update_layout(
-                **PLOTLY_LAYOUT,
-                polar=dict(
-                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#F5CBA7"),
-                    angularaxis=dict(gridcolor="#F5CBA7"),
-                    bgcolor="#FAFCFF",
-                ),
-                title=f"{selected_school} 시설 현황 vs A등급 평균",
-                height=450, showlegend=True,
-                legend=dict(x=0.01, y=0.99),
-            )
-            st.plotly_chart(fig_fac_radar, use_container_width=True)
-    else:
-        st.markdown(
-            "<div style='background:#FEF5E7;padding:20px;border-radius:8px;"
-            "text-align:center;color:#E67E22;'>"
-            "사이드바에서 개별 시설을 선택하면<br>시설 레이더 차트가 표시됩니다."
-            "</div>",
-            unsafe_allow_html=True,
-        )
 
 
-
-# ============================
 # ============================
 # Tab 4: 분석 모델
 # ============================
-# 구조 모델 (분석 모델 탭에서 사용)
-_struct_model, struct_auc, _fac_risk_cv = train_structure_model()
-
 with tab_model:
     st.markdown("### 분석 모델 · 방법론")
     st.caption(
