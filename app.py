@@ -926,8 +926,8 @@ if len(filtered_df) > 0:
     )
 
 # Tabs
-tab_map, tab_analysis, tab_facility, tab_district, tab_sim, tab_method = st.tabs(
-    ["지도", "상세분석", "시설점수", "동네정보", "광명 시뮬레이션", "모델 분석"]
+tab_map, tab_analysis, tab_facility, tab_sim, tab_method = st.tabs(
+    ["지도", "상세분석", "시설점수", "광명 시뮬레이션", "모델 분석"]
 )
 
 # ============================
@@ -1553,25 +1553,13 @@ with tab_facility:
             unsafe_allow_html=True,
         )
 
+    st.markdown("---")
 
+    # ══════════════════════════════════════
+    # 동네정보 (구 동네정보 탭 통합)
+    # ══════════════════════════════════════
+    st.markdown("##### 동네 환경 정보")
 
-# ============================
-# 모델 학습 (방법론탭에서 사용)
-# ============================
-# 구조 모델 (방법론탭에서 사용)
-_struct_model, struct_auc, _fac_risk_cv = train_structure_model()
-
-# 외부검증 AUC (방법론탭에서 사용)
-from sklearn.metrics import roc_auc_score as _roc_auc
-_ext_valid = df_sn.dropna(subset=["structure_risk", "발생건수"])
-_ext_y = (_ext_valid["발생건수"] > 0).astype(int)
-extern_auc = float(_roc_auc(_ext_y, _ext_valid["structure_risk"])) if len(_ext_y.unique()) > 1 else 0.5
-
-
-    # ============================
-    # Tab 4: 동네정보 (구 Tab 5)
-    # ============================
-with tab_district:
     if selected_city == "성남시":
         _dist_pop = load_population()
     else:
@@ -1661,6 +1649,17 @@ with tab_district:
     fig_gu.update_traces(texttemplate="%{text}개소", textposition="outside")
     fig_gu.update_layout(**PLOTLY_LAYOUT, height=300, coloraxis_showscale=False)
     st.plotly_chart(fig_gu, use_container_width=True)
+
+
+# ============================
+# 모델 학습 (모델분석탭에서 사용)
+# ============================
+_struct_model, struct_auc, _fac_risk_cv = train_structure_model()
+
+from sklearn.metrics import roc_auc_score as _roc_auc
+_ext_valid = df_sn.dropna(subset=["structure_risk", "발생건수"])
+_ext_y = (_ext_valid["발생건수"] > 0).astype(int)
+extern_auc = float(_roc_auc(_ext_y, _ext_valid["structure_risk"])) if len(_ext_y.unique()) > 1 else 0.5
 
 
 # ============================
