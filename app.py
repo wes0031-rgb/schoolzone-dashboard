@@ -923,7 +923,7 @@ if scoring_mode == "위험확률 기반":
     _rm_count = df_sn["RM_safety_score"].notna().sum() if "RM_safety_score" in df_sn.columns else 0
     _rm_missing = len(df_sn) - _rm_count
     st.info(
-        f"**위험확률 기반 점수** (팀원 지원 모델) | "
+        f"**위험확률 기반 점수** | "
         f"CV → structure_risk → risk_prob → safety_score 2단계 파이프라인 | "
         f"적용: {_rm_count}/{len(df_sn)}개소 | "
         f"{_rm_missing}개소는 CV 이미지 없음 → V6 점수 fallback"
