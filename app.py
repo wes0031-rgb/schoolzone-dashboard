@@ -219,6 +219,14 @@ def load_cv_features():
 
 
 @st.cache_data
+def load_risk_model_results():
+    path = DATA_DIR / "위험확률_모델결과.csv"
+    if path.exists():
+        return pd.read_csv(path, encoding="utf-8-sig")
+    return pd.DataFrame()
+
+
+@st.cache_data
 def load_gwangmyung():
     _gm = pd.read_csv(DATA_DIR / "광명_스쿨존.csv", encoding="utf-8-sig")
     for _fc in FACILITY_COLS:
@@ -354,19 +362,41 @@ def train_integrated_model():
 # 4. Helper Functions
 # ──────────────────────────────────────────────
 
-def make_popup(row, city="성남시"):
+def make_popup(row, city="성남시", scoring_mode="시설기반 점수 (V6)"):
     """마커 팝업 생성"""
     grade_key = row["등급"]
     color = GRADE_COLORS.get(grade_key, "#999")
     grade_label = GRADE_LABELS.get(grade_key, grade_key)
 
-    # 점수 구조 섹션: 성남시는 가산/감산, 광명시는 모델 추정
+    # 점수 구조 섹션: 성남시 V6 / 성남시 위험확률 / 광명시 모델 추정
     if city == "광명시":
         score_section = f"""
       <table style="font-size:11px;color:#2C3E50;width:100%;border-collapse:collapse;">
         <tr style="background:#FEF5E7;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#2C3E50;">모델 추정값</td></tr>
         <tr><td style="padding:2px 4px;">추정 방식</td><td style="text-align:right;font-size:10px;">성남시 모델 적용</td></tr>
         <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;">예상 안전점수</td><td style="text-align:right;font-weight:700;">{row['활성_안전점수']:.1f}점</td></tr>
+      </table>"""
+    elif scoring_mode == "위험확률 기반" and city == "성남시":
+        _rm_available = pd.notna(row.get("RM_risk_prob"))
+        if _rm_available:
+            _rm_risk = row["RM_risk_prob"]
+            _rm_score = row["RM_safety_score"]
+            _rm_struct = row.get("RM_structure_risk", 0)
+            score_section = f"""
+      <table style="font-size:11px;color:#2C3E50;width:100%;border-collapse:collapse;">
+        <tr style="background:#E8DAEF;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#6C3483;">위험확률 모델</td></tr>
+        <tr><td style="padding:2px 4px;">위험확률</td><td style="text-align:right;font-weight:600;">{_rm_risk:.1%}</td></tr>
+        <tr><td style="padding:2px 4px;">구조위험도</td><td style="text-align:right;font-weight:600;">{_rm_struct:.1%}</td></tr>
+        <tr style="background:#F5EEF8;"><td style="padding:2px 4px;font-weight:700;">안전점수</td><td style="text-align:right;font-weight:700;">{_rm_score:.1f}점</td></tr>
+      </table>"""
+        else:
+            score_section = f"""
+      <table style="font-size:11px;color:#2C3E50;width:100%;border-collapse:collapse;">
+        <tr style="background:#FEF5E7;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#2C3E50;">점수 구조 (V6 fallback)</td></tr>
+        <tr><td style="padding:2px 4px;">가산점(시설)</td><td style="text-align:right;font-weight:600;">{row['가산점_시설_V6']:.1f}점</td></tr>
+        <tr><td style="padding:2px 4px;">감산점 합계</td><td style="text-align:right;font-weight:600;color:#E74C3C;">-{row['감산점_합계_V6']:.1f}점</td></tr>
+        <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;">최종 안전점수</td><td style="text-align:right;font-weight:700;">{row['활성_안전점수']:.1f}점</td></tr>
+        <tr><td colspan="2" style="padding:2px 4px;font-size:10px;color:#E67E22;">CV 이미지 없음 → V6 점수 사용</td></tr>
       </table>"""
     else:
         score_section = f"""
@@ -456,7 +486,7 @@ def create_legend_html():
     """
 
 
-def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체)", city="성남시"):
+def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체)", city="성남시", scoring_mode="시설기반 점수 (V6)"):
     cfg = CITY_CONFIG[city]
     center = cfg["center"]
     zoom = cfg["zoom"]
@@ -528,7 +558,7 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
             fill=True,
             fill_color=color,
             fill_opacity=1.0 if is_selected else 0.9,
-            popup=folium.Popup(make_popup(row, city=city), max_width=290),
+            popup=folium.Popup(make_popup(row, city=city, scoring_mode=scoring_mode), max_width=290),
             tooltip=tooltip_text,
         ).add_to(m)
 
@@ -669,6 +699,14 @@ def create_map(filtered_df, overlay_flags, pop_df, geo, selected_school="(전체
 # ── 도시 선택 (최상단) ──
 selected_city = st.sidebar.radio("도시 선택", ["성남시", "광명시"], horizontal=True)
 
+# ── 점수 모드 선택 (성남시만) ──
+if selected_city == "성남시":
+    scoring_mode = st.sidebar.radio(
+        "점수 모드", ["시설기반 점수 (V6)", "위험확률 기반"], horizontal=True
+    )
+else:
+    scoring_mode = "시설기반 점수 (V6)"
+
 # ── 성남시 데이터 (항상 로드 — 모델 학습 + 비교용) ──
 df_sn_raw = load_data()
 df_sn = df_sn_raw.copy()
@@ -697,6 +735,33 @@ df_sn["_시설합계"] = df_sn[FACILITY_COLS].sum(axis=1)
 df_sn["활성_안전점수"] = df_sn["최종안전점수_V6"]
 df_sn["등급"] = df_sn["등급_V6"]
 df_sn["안전등급"] = df_sn["등급_V6"].map(GRADE_LABELS)
+
+# ── 위험확률 모델 결과 병합 ──
+_rm_df = load_risk_model_results()
+if len(_rm_df) > 0:
+    _rm_rename = {
+        "safety_score": "RM_safety_score",
+        "safety_grade": "RM_safety_grade",
+        "risk_prob": "RM_risk_prob",
+        "structure_risk": "RM_structure_risk",
+        "p_wide": "RM_p_wide",
+        "p_narrow": "RM_p_narrow",
+        "p_barrier_yes": "RM_p_barrier_yes",
+        "p_barrier_no": "RM_p_barrier_no",
+        "road_width_relative": "RM_road_width_relative",
+        "sidewalk_ratio": "RM_sidewalk_ratio",
+        "parked_density": "RM_parked_density",
+    }
+    _rm_cols = ["시설물명"] + list(_rm_rename.keys())
+    _rm_subset = _rm_df[_rm_cols].rename(columns=_rm_rename)
+    df_sn = df_sn.merge(_rm_subset, on="시설물명", how="left")
+
+# 위험확률 모드 선택 시 활성 점수/등급 교체
+if scoring_mode == "위험확률 기반" and "RM_safety_score" in df_sn.columns:
+    _has_rm = df_sn["RM_safety_score"].notna()
+    df_sn.loc[_has_rm, "활성_안전점수"] = df_sn.loc[_has_rm, "RM_safety_score"]
+    df_sn.loc[_has_rm, "등급"] = df_sn.loc[_has_rm, "RM_safety_grade"]
+    df_sn.loc[_has_rm, "안전등급"] = df_sn.loc[_has_rm, "RM_safety_grade"].map(GRADE_LABELS)
 
 # ── 광명시 안전점수 예측 ──
 gm_raw = load_gwangmyung()
@@ -800,9 +865,12 @@ st.sidebar.markdown(
 )
 csv_cols = ["시설물명", "시설유형", "구", "안전등급", "활성_안전점수"]
 if selected_city == "성남시":
-    csv_cols += ["가산점_시설_V6", "가산점_보너스_V6", "감산점_합계_V6"]
+    if scoring_mode == "위험확률 기반":
+        csv_cols += ["RM_safety_score", "RM_safety_grade", "RM_risk_prob", "RM_structure_risk"]
+    else:
+        csv_cols += ["가산점_시설_V6", "가산점_보너스_V6", "감산점_합계_V6"]
 csv_cols += FACILITY_COLS + ["발생건수", "어린이비율"]
-if selected_city == "성남시":
+if selected_city == "성남시" and scoring_mode != "위험확률 기반":
     csv_cols += ["안전확률", "주의확률", "위험확률"]
 csv_cols = [c for c in csv_cols if c in df.columns]
 csv_export = df[csv_cols].copy().rename(columns={
@@ -810,6 +878,10 @@ csv_export = df[csv_cols].copy().rename(columns={
     "가산점_시설_V6": "가산점_시설",
     "가산점_보너스_V6": "가산점_보너스",
     "감산점_합계_V6": "감산점_합계",
+    "RM_safety_score": "위험확률_안전점수",
+    "RM_safety_grade": "위험확률_등급",
+    "RM_risk_prob": "위험확률",
+    "RM_structure_risk": "구조위험도",
 })
 st.sidebar.download_button(
     label="CSV 다운로드",
@@ -846,6 +918,16 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.caption("점수는 확률 추정치이며, 보조 의사결정 도구로 사용하도록 권장합니다.")
+
+if scoring_mode == "위험확률 기반":
+    _rm_count = df_sn["RM_safety_score"].notna().sum() if "RM_safety_score" in df_sn.columns else 0
+    _rm_missing = len(df_sn) - _rm_count
+    st.info(
+        f"**위험확률 기반 점수** (팀원 지원 모델) | "
+        f"CV → structure_risk → risk_prob → safety_score 2단계 파이프라인 | "
+        f"적용: {_rm_count}/{len(df_sn)}개소 | "
+        f"{_rm_missing}개소는 CV 이미지 없음 → V6 점수 fallback"
+    )
 
 # KPIs
 k1, k2, k3, k4 = st.columns(4)
@@ -985,7 +1067,7 @@ with tab_map:
     else:
         pop_df = load_gm_population()
         geo = load_gm_geojson()
-    m = create_map(filtered_df, overlay_flags, pop_df, geo, selected_school, city=selected_city)
+    m = create_map(filtered_df, overlay_flags, pop_df, geo, selected_school, city=selected_city, scoring_mode=scoring_mode)
     if selected_city == "광명시":
         st.caption("시설물 레이어(지킴이집, 사고다발지 등)는 성남시에서만 지원됩니다.")
     st_folium(m, height=550, use_container_width=True, returned_objects=[])
@@ -998,7 +1080,10 @@ with tab_analysis:
 
 with _sub_all:
     # ── 점수 구조 시각화 ──
-    if selected_city == "성남시" and "가산점_시설_V6" in filtered_df.columns:
+    if scoring_mode == "위험확률 기반" and selected_city == "성남시":
+        st.markdown("##### 위험확률 기반 점수 분포")
+        st.caption("2단계 파이프라인: CV 5피처 → structure_risk → risk_prob → safety_score")
+    elif selected_city == "성남시" and "가산점_시설_V6" in filtered_df.columns:
         st.markdown("##### 점수 구조: 기본(50) + 가산점(시설+보너스) - 감산점")
         score_struct = pd.DataFrame({
             "항목": ["가산점(시설)", "가산점(보너스)", "감산점 합계"],
@@ -1137,6 +1222,17 @@ with _sub_indiv:
             f"</div>",
             unsafe_allow_html=True,
         )
+
+        # ── 위험확률 모드: 점수 구조 상세 ──
+        if scoring_mode == "위험확률 기반" and selected_city == "성남시":
+            _sr_has_rm = pd.notna(school_row.get("RM_risk_prob"))
+            if _sr_has_rm:
+                _sr_col1, _sr_col2, _sr_col3 = st.columns(3)
+                _sr_col1.metric("위험확률 (risk_prob)", f"{school_row['RM_risk_prob']:.1%}")
+                _sr_col2.metric("구조위험도 (structure_risk)", f"{school_row['RM_structure_risk']:.1%}")
+                _sr_col3.metric("안전점수 (safety_score)", f"{school_row['RM_safety_score']:.1f}")
+            else:
+                st.warning("이 시설은 CV 이미지가 없어 위험확률 모델 적용 불가 → V6 점수를 사용합니다.")
 
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
 
@@ -1905,6 +2001,67 @@ with tab_cv:
             )
 
 
+    # ── (f) V6 점수 vs 위험확률 점수 비교 ──
+    if selected_city == "성남시" and "RM_safety_score" in df_sn.columns:
+        _cmp = df_sn.dropna(subset=["RM_safety_score"]).copy()
+        if len(_cmp) > 0:
+            st.markdown("---")
+            st.markdown("##### V6 점수 vs 위험확률 점수 비교")
+            st.caption(f"위험확률 모델이 적용된 {len(_cmp)}개소 대상 비교")
+
+            _cmp_c1, _cmp_c2 = st.columns(2)
+            with _cmp_c1:
+                fig_scatter = px.scatter(
+                    _cmp, x="최종안전점수_V6", y="RM_safety_score",
+                    color="RM_safety_grade",
+                    color_discrete_map=GRADE_COLORS,
+                    hover_data=["시설물명", "등급_V6", "RM_safety_grade"],
+                    labels={
+                        "최종안전점수_V6": "V6 안전점수",
+                        "RM_safety_score": "위험확률 안전점수",
+                        "RM_safety_grade": "위험확률 등급",
+                    },
+                    title="V6 점수 vs 위험확률 점수 산점도",
+                )
+                fig_scatter.add_shape(
+                    type="line", x0=0, y0=0, x1=100, y1=100,
+                    line=dict(dash="dash", color="#999"),
+                )
+                fig_scatter.update_layout(**PLOTLY_LAYOUT, height=420)
+                st.plotly_chart(fig_scatter, use_container_width=True)
+
+            with _cmp_c2:
+                # 등급 변화 교차표
+                _cross = pd.crosstab(
+                    _cmp["등급_V6"].rename("V6 등급"),
+                    _cmp["RM_safety_grade"].rename("위험확률 등급"),
+                ).reindex(index=["A", "B", "C", "D"], columns=["A", "B", "C", "D"], fill_value=0)
+
+                fig_heat = px.imshow(
+                    _cross.values,
+                    x=["A", "B", "C", "D"], y=["A", "B", "C", "D"],
+                    labels=dict(x="위험확률 등급", y="V6 등급", color="개소"),
+                    title="등급 변화 매트릭스 (V6 → 위험확률)",
+                    color_continuous_scale="YlOrRd",
+                    text_auto=True,
+                )
+                fig_heat.update_layout(**PLOTLY_LAYOUT, height=420)
+                st.plotly_chart(fig_heat, use_container_width=True)
+
+            # 등급 변화 요약
+            _same = (_cmp["등급_V6"] == _cmp["RM_safety_grade"]).sum()
+            _diff = len(_cmp) - _same
+            st.markdown(
+                f'<div style="background:#F8F9F9;padding:10px 14px;border-radius:8px;'
+                f'font-size:13px;color:#2C3E50;">'
+                f'<b>등급 일치:</b> {_same}개소 ({_same/len(_cmp)*100:.0f}%) | '
+                f'<b>등급 변화:</b> {_diff}개소 ({_diff/len(_cmp)*100:.0f}%) | '
+                f'V6 점수 범위: {_cmp["최종안전점수_V6"].min():.1f}~{_cmp["최종안전점수_V6"].max():.1f} | '
+                f'위험확률 점수 범위: {_cmp["RM_safety_score"].min():.1f}~{_cmp["RM_safety_score"].max():.1f}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
     # ============================
     # Tab 5: 동네정보
     # ============================
@@ -2341,6 +2498,58 @@ with tab_method:
             f'</span></div>',
             unsafe_allow_html=True,
         )
+
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+
+    # ── (d-1) 위험확률 기반 모델 설명 ──
+    st.markdown("##### 위험확률 기반 모델 (2단계 파이프라인)")
+    st.markdown(
+        '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
+        '<div style="flex:1;min-width:240px;background:linear-gradient(135deg,#F5EEF8,#E8DAEF);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #6C3483;">'
+        '<b style="color:#6C3483;font-size:15px;">1단계: CV → 구조위험도</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '입력: CV 5피처 (p_wide, p_barrier_yes,<br>'
+        'road_width_relative, sidewalk_ratio, parked_density)<br>'
+        '모델: Logistic Regression<br>'
+        '출력: <b>structure_risk</b> (구조위험 확률)<br>'
+        '<b>AUC = 0.71</b> (5-Fold CV)'
+        '</span></div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#6C3483;">&#10132;</div>'
+        '<div style="flex:1;min-width:240px;background:linear-gradient(135deg,#E8DAEF,#D2B4DE);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #8E44AD;">'
+        '<b style="color:#8E44AD;font-size:15px;">2단계: 통합 → 위험확률</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '입력: structure_risk + 9개 시설물 + 어린이비율<br>'
+        '모델: Logistic Regression<br>'
+        '출력: <b>risk_prob</b> (위험확률)<br>'
+        '<b>AUC = 0.92</b> (5-Fold CV)'
+        '</span></div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#6C3483;">&#10132;</div>'
+        '<div style="flex:1;min-width:180px;background:linear-gradient(135deg,#D2B4DE,#BB8FCE);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #6C3483;">'
+        '<b style="color:#fff;font-size:15px;">안전점수</b><br>'
+        '<span style="font-size:12px;color:#fff;">'
+        '<code style="background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:4px;">'
+        'safety_score = 100 - risk_prob &times; 100'
+        '</code><br><br>'
+        '등급: 4분위 균등 분할<br>'
+        'A 29 / B 29 / C 29 / D 30개소'
+        '</span></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div style="background:#F5EEF8;padding:12px 16px;border-radius:8px;'
+        'border-left:4px solid #8E44AD;margin-bottom:16px;">'
+        '<span style="font-size:13px;color:#2C3E50;">'
+        '<b style="color:#6C3483;">적용 범위:</b> 성남시 142개소 중 117개소 (CV 이미지 보유). '
+        '25개소는 CV 이미지 미보유 → V6 점수 fallback.<br>'
+        '<b style="color:#6C3483;">기존 V6 모델과의 차이:</b> V6는 기본50 + 가산 - 감산 방식의 규칙 기반 점수. '
+        '위험확률 모델은 머신러닝 기반으로 도로 구조(CV)를 반영한 데이터 드리븐 점수.'
+        '</span></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
