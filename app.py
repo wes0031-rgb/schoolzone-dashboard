@@ -985,8 +985,8 @@ if len(filtered_df) > 0:
     )
 
 # Tabs
-tab_map, tab_analysis, tab_facility, tab_cv, tab_district, tab_sim, tab_method = st.tabs(
-    ["지도", "상세분석", "시설점수", "도로환경 (CV)", "동네정보", "광명 시뮬레이션", "분석 방법론"]
+tab_map, tab_analysis, tab_facility, tab_district, tab_sim, tab_model = st.tabs(
+    ["지도", "상세분석", "시설점수", "동네정보", "광명 시뮬레이션", "분석 모델"]
 )
 
 # ============================
@@ -1623,54 +1623,166 @@ with tab_facility:
 
 
 # ============================
-# Tab 4: 도로환경 (CV)
 # ============================
-# 구조 모델 (CV탭 + 방법론탭에서 사용)
+# Tab 4: 분석 모델
+# ============================
+# 구조 모델 (분석 모델 탭에서 사용)
 _struct_model, struct_auc, _fac_risk_cv = train_structure_model()
 
-with tab_cv:
-    st.markdown("### 캡스톤 연구: 3단계 사고 예측 모델")
+with tab_model:
+    st.markdown("### 분석 모델 · 방법론")
     st.caption(
-        "핵심 메시지: 스쿨존 사고는 구조 + 정책(시설) + 노출(어린이)의 결합 결과이다. "
-        "도로 구조 단독으로는 설명력이 부족하며, 정책 시설 투입이 핵심이다."
+        "스쿨존 안전등급 분석에 사용된 데이터, 모델, 도로환경(CV) 분석을 통합 정리합니다. "
+        "핵심 메시지: 스쿨존 사고는 구조 + 정책(시설) + 노출(어린이)의 결합 결과이다."
     )
     if selected_city == "광명시":
-        st.info("아래 모델 분석은 성남시 데이터 기반입니다. 개별 시설 분석·로드뷰는 성남시 전용입니다.")
+        st.info("아래 모델·CV 분석은 성남시 데이터 기반입니다. 개별 시설 분석·로드뷰는 성남시 전용입니다.")
 
-    # 성남시 데이터로 외부검증 AUC 계산 (모델 분석은 항상 성남시 기준)
+    # ── 1. 프로젝트 개요 + 아키텍처 ──
+    _ov_c1, _ov_c2 = st.columns([3, 2])
+    with _ov_c1:
+        st.markdown("##### 프로젝트 개요")
+        st.markdown(
+            '<div style="background:#FEF5E7;padding:16px 20px;border-radius:10px;'
+            'border-left:4px solid #E67E22;margin-bottom:16px;">'
+            '<span style="font-size:14px;color:#2C3E50;">'
+            '<b>목표:</b> 어린이 보호구역(스쿨존)의 '
+            '안전등급을 데이터 기반으로 분석하여, 시설물 투자 우선순위를 제공<br><br>'
+            '<b>분석 대상:</b> 성남시 142개소 + 광명시 51개소<br>'
+            '<b>분석 기간:</b> 2018~2023년 사고 + 2024년 시설 현황<br>'
+            '<b>핵심:</b> <b>도로 구조 + 정책(시설) + 노출(어린이)</b>의 결합 결과'
+            '</span></div>',
+            unsafe_allow_html=True,
+        )
+    with _ov_c2:
+        _arch_path = DATA_DIR / "system_architecture.jpg"
+        if _arch_path.exists():
+            st.image(str(_arch_path), caption="시스템 아키텍처", use_container_width=True)
+
+    st.markdown("---")
+
+    # ── 2. 안전점수 산출 방법 ──
+    st.markdown("##### 안전점수 산출 방법")
+    _sc_c1, _sc_c2 = st.columns(2)
+    with _sc_c1:
+        st.markdown(
+            '<div style="background:#FEF9E7;padding:14px 18px;border-radius:10px;'
+            'border-left:4px solid #F39C12;margin-bottom:12px;">'
+            '<b style="color:#2C3E50;font-size:14px;">V6 규칙 기반 점수</b><br>'
+            '<code style="background:#F5CBA7;padding:4px 10px;border-radius:6px;font-size:13px;">'
+            '안전점수 = 기본(50) + 가산(시설) - 감산(사고)</code><br><br>'
+            '<span style="font-size:13px;color:#2C3E50;">'
+            '<b>가산:</b> 9개 시설물 보유량 기반<br>'
+            '<b>감산:</b> 사고 발생건수, 심각도 기반</span></div>',
+            unsafe_allow_html=True,
+        )
+    with _sc_c2:
+        st.markdown(
+            '<div style="background:#FEF5E7;padding:14px 18px;border-radius:10px;'
+            'border-left:4px solid #154360;margin-bottom:12px;">'
+            '<b style="color:#2C3E50;font-size:14px;">등급 기준 (사분위수)</b><br>'
+            '<span style="font-size:13px;color:#2C3E50;">'
+            '<b style="color:#154360;">A등급 (우수)</b>: 상위 25%<br>'
+            '<b style="color:#2471A3;">B등급 (양호)</b>: 25~50%<br>'
+            '<b style="color:#85C1E9;">C등급 (보통)</b>: 50~75%<br>'
+            '<b style="color:#E74C3C;">D등급 (주의)</b>: 하위 25%'
+            '</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # ── 3. 3단계 사고 예측 모델 ──
+    st.markdown("##### 3단계 사고 예측 모델")
+
+    # 파이프라인 카드
+    st.markdown(
+        '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
+        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FEF9E7,#FCF3CF);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #F39C12;">'
+        '<b style="color:#F39C12;font-size:15px;">1단계: 구조 모델</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '카카오맵 로드뷰 이미지 분석<br>'
+        '5개 CV 변수 (도로폭, 분리장치 등)<br>'
+        'Binary 분류 · <b>Logistic Regression</b>'
+        '</span></div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#2C3E50;">&#10132;</div>'
+        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FDEDEC,#F9EBEA);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #E74C3C;">'
+        '<b style="color:#E74C3C;font-size:15px;">2단계: 외부검증</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '구조 위험도를 시설 데이터에 적용<br>'
+        '도로 구조 단독 설명력 부족<br>'
+        '<b>AUC 하락 확인</b>'
+        '</span></div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#2C3E50;">&#10132;</div>'
+        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FDEBD0,#EAFAF1);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #27AE60;">'
+        '<b style="color:#27AE60;font-size:15px;">3단계: 통합 모델</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '구조위험 + 9개 시설 + 어린이비율<br>'
+        '3-class: 안전/주의/위험<br>'
+        '<b>Pipeline(Scaler + LR)</b>'
+        '</span></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # AUC 비교 차트 + 계수 해석 (2-column)
     if True:
         from sklearn.metrics import roc_auc_score as _roc_auc
         _ext_valid = df_sn.dropna(subset=["structure_risk", "발생건수"])
         _ext_y = (_ext_valid["발생건수"] > 0).astype(int)
         extern_auc = float(_roc_auc(_ext_y, _ext_valid["structure_risk"])) if len(_ext_y.unique()) > 1 else 0.5
 
-        # ── (a) 3단계 모델 AUC 비교 차트 ──
-        st.markdown("##### 3단계 모델 AUC 비교")
-        auc_data = pd.DataFrame({
-            "단계": [
-                "1단계\n구조 (CV 이미지)",
-                "2단계\n외부검증 (구조→시설데이터)",
-                "3단계\n통합 (구조+시설+노출)",
-            ],
-            "AUC": [struct_auc, extern_auc, integ_auc],
-            "색상": ["#F39C12", "#E74C3C", "#27AE60"],
-        })
-        fig_auc = go.Figure()
-        fig_auc.add_trace(go.Bar(
-            x=auc_data["단계"], y=auc_data["AUC"],
-            marker_color=auc_data["색상"].tolist(),
-            text=[f"{v:.3f}" for v in auc_data["AUC"]],
-            textposition="outside", textfont=dict(size=16, color="#2C3E50"),
-        ))
-        fig_auc.add_hline(y=0.5, line_dash="dash", line_color="#E74C3C",
-                          annotation_text="무작위 기준선 (0.5)", annotation_position="top left")
-        fig_auc.update_layout(
-            **PLOTLY_LAYOUT, height=380,
-            title="3단계 모델 성능 비교 (5-Fold CV AUC)",
-            yaxis=dict(title="ROC-AUC", range=[0, 1]),
-            xaxis=dict(title=""),
-        )
-        st.plotly_chart(fig_auc, use_container_width=True)
+        _auc_c1, _auc_c2 = st.columns(2)
+
+        with _auc_c1:
+            auc_data = pd.DataFrame({
+                "단계": [
+                    "1단계\n구조 (CV)",
+                    "2단계\n외부검증",
+                    "3단계\n통합",
+                ],
+                "AUC": [struct_auc, extern_auc, integ_auc],
+                "색상": ["#F39C12", "#E74C3C", "#27AE60"],
+            })
+            fig_auc = go.Figure()
+            fig_auc.add_trace(go.Bar(
+                x=auc_data["단계"], y=auc_data["AUC"],
+                marker_color=auc_data["색상"].tolist(),
+                text=[f"{v:.3f}" for v in auc_data["AUC"]],
+                textposition="outside", textfont=dict(size=16, color="#2C3E50"),
+            ))
+            fig_auc.add_hline(y=0.5, line_dash="dash", line_color="#E74C3C",
+                              annotation_text="무작위 기준선 (0.5)", annotation_position="top left")
+            fig_auc.update_layout(
+                **PLOTLY_LAYOUT, height=380,
+                title="3단계 모델 성능 비교 (5-Fold CV AUC)",
+                yaxis=dict(title="ROC-AUC", range=[0, 1]),
+                xaxis=dict(title=""),
+            )
+            st.plotly_chart(fig_auc, use_container_width=True)
+
+        with _auc_c2:
+            coef_sorted = integ_coef.sort_values("계수")
+            coef_colors = ["#E74C3C" if c > 0 else "#F39C12" for c in coef_sorted["계수"]]
+            fig_coef = go.Figure()
+            fig_coef.add_trace(go.Bar(
+                y=coef_sorted["변수"], x=coef_sorted["계수"],
+                orientation="h",
+                marker_color=coef_colors,
+                text=[f"{c:+.3f}" for c in coef_sorted["계수"]],
+                textposition="outside",
+            ))
+            fig_coef.add_vline(x=0, line_color="#555", line_width=1)
+            fig_coef.update_layout(
+                **PLOTLY_LAYOUT, height=380,
+                title="통합 모델 변수 계수 (양수=위험↑ / 음수=보호↑)",
+                xaxis=dict(title="계수"),
+                yaxis=dict(title=""),
+            )
+            st.plotly_chart(fig_coef, use_container_width=True)
 
         st.markdown(
             '<div style="background:linear-gradient(135deg,#FEF9E7,#FDEBD0);padding:14px 18px;'
@@ -1679,65 +1791,13 @@ with tab_cv:
             f'도로 구조만으로는 AUC {struct_auc:.3f}로 제한적이며, '
             f'구조 위험도를 시설 데이터에 직접 적용하면 AUC {extern_auc:.3f}로 오히려 하락합니다. '
             f'그러나 <b>구조 + 9개 시설 + 어린이비율</b>을 통합하면 3-class AUC <b>{integ_auc:.3f}</b>으로 '
-            '유의미한 예측력을 확보합니다. (라벨: 안전 0건 / 주의 1~6건 / 위험 7건+)'
+            '유의미한 예측력을 확보합니다.'
             '</div>',
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
-
-        # ── (b) 통합 모델 계수 해석 차트 ──
-        st.markdown("##### 통합 모델 변수 계수 해석")
-        coef_sorted = integ_coef.sort_values("계수")
-        coef_colors = ["#E74C3C" if c > 0 else "#F39C12" for c in coef_sorted["계수"]]
-
-        fig_coef = go.Figure()
-        fig_coef.add_trace(go.Bar(
-            y=coef_sorted["변수"], x=coef_sorted["계수"],
-            orientation="h",
-            marker_color=coef_colors,
-            text=[f"{c:+.3f}" for c in coef_sorted["계수"]],
-            textposition="outside",
-        ))
-        fig_coef.add_vline(x=0, line_color="#555", line_width=1)
-        fig_coef.update_layout(
-            **PLOTLY_LAYOUT, height=420,
-            title="통합 모델 — 위험(7건+) 예측 변수 계수 (양수=위험 증가 / 음수=보호 효과)",
-            xaxis=dict(title="계수"),
-            yaxis=dict(title=""),
-        )
-        st.plotly_chart(fig_coef, use_container_width=True)
-
-        # 계수 인사이트 카드
-        pos_vars = coef_sorted[coef_sorted["계수"] > 0].sort_values("계수", ascending=False)
-        neg_vars = coef_sorted[coef_sorted["계수"] < 0].sort_values("계수")
-        cv_ins1, cv_ins2 = st.columns(2)
-        with cv_ins1:
-            st.markdown(
-                '<div style="background:#FDEDEC;padding:12px 16px;border-radius:8px;'
-                'border-left:4px solid #E74C3C;">'
-                '<b style="color:#C0392B;">위험 증가 (+) 변수</b><br>'
-                '<span style="font-size:13px;color:#2C3E50;">'
-                + "<br>".join(f"{r['변수']}: {r['계수']:+.3f}" for _, r in pos_vars.iterrows())
-                + '<br><br>사고가 많은 곳에 사후 설치되는 패턴</span></div>',
-                unsafe_allow_html=True,
-            )
-        with cv_ins2:
-            st.markdown(
-                '<div style="background:#FEF9E7;padding:12px 16px;border-radius:8px;'
-                'border-left:4px solid #F39C12;">'
-                '<b style="color:#2C3E50;">보호 효과 (-) 변수</b><br>'
-                '<span style="font-size:13px;color:#2C3E50;">'
-                + "<br>".join(f"{r['변수']}: {r['계수']:+.3f}" for _, r in neg_vars.iterrows())
-                + '<br><br>예방적 시설의 사고 억제 효과</span></div>',
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
-
-        # ── (c) 시설별 사고 확률 예측 (3단계) ──
-        st.markdown("##### 시설별 사고 확률 예측 — 3단계 (통합 모델)")
-
+    # 시설별 사고 확률 Top 20
+    with st.expander("시설별 사고 확률 예측 — Top 20 (통합 모델)"):
         df_for_prob = df_sn.dropna(subset=["위험확률"]).copy()
         if len(df_for_prob) > 0:
             prob_display = df_for_prob.nlargest(20, "위험확률")[
@@ -1754,259 +1814,48 @@ with tab_cv:
             st.dataframe(prob_display, use_container_width=True, hide_index=True)
             st.caption(f"위험확률 상위 20개소 (전체 {len(df_for_prob)}개소 분석)")
 
-        st.markdown("---")
+    st.markdown("---")
 
-        # ── (d) 기존 유지: 등급별 CV 특성 + 레이더 ──
-        st.markdown("##### 등급별 도로환경 특성 (CV)")
-        cv_cols = ["CV_도로폭확률", "CV_분리장치확률", "CV_도로상대폭", "CV_보행공간비율", "CV_주정차밀도"]
-        cv_labels = ["넓은 도로 확률", "분리장치 확률", "도로 상대폭", "보행공간 비율", "주정차 밀도"]
-        df_cv = df_sn.dropna(subset=["CV_도로폭확률"])
+    # ── 4. 위험확률 기반 모델 ──
+    st.markdown("##### 위험확률 기반 모델 (2단계 파이프라인)")
 
-        cv_col1, cv_col2 = st.columns(2)
+    st.markdown(
+        '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
+        '<div style="flex:1;min-width:220px;background:linear-gradient(135deg,#F5EEF8,#E8DAEF);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #6C3483;">'
+        '<b style="color:#6C3483;font-size:15px;">1단계: CV → 구조위험도</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '입력: CV 5피처<br>'
+        '모델: Logistic Regression<br>'
+        '출력: structure_risk<br>'
+        '<b>AUC = 0.71</b></span></div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#6C3483;">&#10132;</div>'
+        '<div style="flex:1;min-width:220px;background:linear-gradient(135deg,#E8DAEF,#D2B4DE);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #8E44AD;">'
+        '<b style="color:#8E44AD;font-size:15px;">2단계: 통합 → 위험확률</b><br>'
+        '<span style="font-size:12px;color:#2C3E50;">'
+        '입력: structure_risk + 9시설 + 어린이비율<br>'
+        '모델: Logistic Regression<br>'
+        '출력: risk_prob<br>'
+        '<b>AUC = 0.92</b></span></div>'
+        '<div style="display:flex;align-items:center;font-size:24px;color:#6C3483;">&#10132;</div>'
+        '<div style="flex:1;min-width:160px;background:linear-gradient(135deg,#D2B4DE,#BB8FCE);'
+        'padding:14px 16px;border-radius:10px;border-top:4px solid #6C3483;">'
+        '<b style="color:#fff;font-size:15px;">안전점수</b><br>'
+        '<span style="font-size:12px;color:#fff;">'
+        '<code style="background:rgba(255,255,255,0.2);padding:3px 6px;border-radius:4px;">'
+        'safety_score = 100 - risk_prob × 100</code><br>'
+        '등급: 4분위 균등분할<br>'
+        '117/142개소 적용</span></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
-        with cv_col1:
-            cv_grade = df_cv.groupby("등급")[cv_cols].mean()
-            cv_grade.columns = cv_labels
-            cv_grade = cv_grade.reindex(["A", "B", "C", "D"])
-            cv_melt = cv_grade.reset_index().melt(
-                id_vars="등급", var_name="특성", value_name="값",
-            )
-            fig_cv_grade = px.bar(
-                cv_melt[cv_melt["특성"].isin(["넓은 도로 확률", "분리장치 확률"])],
-                x="등급", y="값", color="특성", barmode="group",
-                title="등급별 도로폭 vs 분리장치 확률",
-                color_discrete_map={
-                    "넓은 도로 확률": "#E74C3C", "분리장치 확률": "#F39C12",
-                },
-            )
-            fig_cv_grade.update_layout(**PLOTLY_LAYOUT, height=380)
-            st.plotly_chart(fig_cv_grade, use_container_width=True)
-
-        with cv_col2:
-            if selected_city != "성남시":
-                st.markdown(
-                    "<div style='background:#FEF9E7;padding:20px;border-radius:8px;"
-                    "text-align:center;color:#E67E22;margin-top:40px;'>"
-                    "개별 시설 CV 분석은 성남시에서만 지원됩니다."
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-            elif selected_school != "(전체)" and selected_school in df_cv["시설물명"].values:
-                cv_row = df_cv[df_cv["시설물명"] == selected_school].iloc[0]
-                cv_avg = df_cv[cv_cols].mean()
-
-                cv_radar_vals = [
-                    cv_row["CV_도로폭확률"] * 100,
-                    cv_row["CV_분리장치확률"] * 100,
-                    cv_row["CV_도로상대폭"] * 200,
-                    cv_row["CV_보행공간비율"] * 300,
-                    min(cv_row["CV_주정차밀도"] * 20, 100),
-                ]
-                cv_avg_vals = [
-                    cv_avg["CV_도로폭확률"] * 100,
-                    cv_avg["CV_분리장치확률"] * 100,
-                    cv_avg["CV_도로상대폭"] * 200,
-                    cv_avg["CV_보행공간비율"] * 300,
-                    min(cv_avg["CV_주정차밀도"] * 20, 100),
-                ]
-                cv_theta = cv_labels + [cv_labels[0]]
-
-                fig_cv_radar = go.Figure()
-                fig_cv_radar.add_trace(go.Scatterpolar(
-                    r=cv_radar_vals + [cv_radar_vals[0]],
-                    theta=cv_theta,
-                    fill="toself", name=selected_school,
-                    fillcolor="rgba(108,52,131,0.2)",
-                    line=dict(color="#E67E22", width=2),
-                ))
-                fig_cv_radar.add_trace(go.Scatterpolar(
-                    r=cv_avg_vals + [cv_avg_vals[0]],
-                    theta=cv_theta,
-                    fill="toself", name="전체 평균",
-                    fillcolor="rgba(46,134,193,0.1)",
-                    line=dict(color="#F39C12", width=1, dash="dash"),
-                ))
-                fig_cv_radar.update_layout(
-                    **PLOTLY_LAYOUT,
-                    polar=dict(
-                        radialaxis=dict(visible=True, range=[0, 100], gridcolor="#FDEBD0"),
-                        angularaxis=dict(gridcolor="#FDEBD0"),
-                        bgcolor="#FAFCFF",
-                    ),
-                    title=f"{selected_school} 도로환경 프로필",
-                    height=380, showlegend=True,
-                    legend=dict(x=0.01, y=0.99),
-                )
-                st.plotly_chart(fig_cv_radar, use_container_width=True)
-
-                # ── (d-1) 로드뷰 + CV 게이지 오버레이 ──
-                _cv_rv_name = selected_school.replace(" ", "_")
-                _cv_rv_path = DATA_DIR / "roadview" / f"{_cv_rv_name}_북쪽.jpg"
-                if not _cv_rv_path.exists():
-                    _cv_rv_path = DATA_DIR / "roadview" / f"{selected_school}_북쪽.jpg"
-
-                st.markdown("##### 로드뷰 + CV 분석 결과")
-                _rv_col, _gauge_col = st.columns([3, 2])
-                with _rv_col:
-                    if _cv_rv_path.exists():
-                        st.image(str(_cv_rv_path), caption=f"{selected_school} 북쪽 방향", use_container_width=True)
-                    else:
-                        st.info("로드뷰 이미지 없음")
-                with _gauge_col:
-                    _cv_items = [
-                        ("넓은 도로", cv_row["CV_도로폭확률"], "#E74C3C", "높을수록 넓은 도로"),
-                        ("차단시설", cv_row["CV_분리장치확률"], "#27AE60", "높을수록 안전"),
-                        ("도로 비율", cv_row["CV_도로상대폭"], "#3498DB", "화면 내 도로 면적"),
-                        ("보행공간", cv_row["CV_보행공간비율"], "#8E44AD", "높을수록 보행자 안전"),
-                        ("주정차", min(cv_row["CV_주정차밀도"] / 5, 1.0), "#F39C12", "높을수록 시야 방해"),
-                    ]
-                    _gauge_html = ""
-                    for _lbl, _val, _clr, _desc in _cv_items:
-                        _pct = min(_val * 100, 100)
-                        _gauge_html += (
-                            f'<div style="margin-bottom:10px;">'
-                            f'<div style="display:flex;justify-content:space-between;font-size:12px;color:#2C3E50;">'
-                            f'<span style="font-weight:600;">{_lbl}</span>'
-                            f'<span>{_pct:.0f}%</span></div>'
-                            f'<div style="background:#ECF0F1;border-radius:6px;height:14px;overflow:hidden;">'
-                            f'<div style="width:{_pct:.0f}%;height:100%;background:{_clr};border-radius:6px;'
-                            f'transition:width 0.3s;"></div></div>'
-                            f'<div style="font-size:10px;color:#7F8C8D;margin-top:1px;">{_desc}</div>'
-                            f'</div>'
-                        )
-                    st.markdown(
-                        f'<div style="background:#FAFCFF;padding:14px 16px;border-radius:10px;'
-                        f'border:1px solid #F5CBA7;">'
-                        f'<div style="font-weight:700;color:#2C3E50;margin-bottom:10px;font-size:14px;">'
-                        f'CV 분석 지표</div>{_gauge_html}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                # ── (d-2) 유사 도로환경 학교 매칭 ──
-                st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-                st.markdown("##### 유사 도로환경 학교")
-                st.caption("CV 5개 지표 기반 코사인 유사도 — 도로환경이 비슷한 학교를 비교합니다.")
-                _cv_feats = cv_cols
-                _cv_valid = df_cv.dropna(subset=_cv_feats).copy()
-                if len(_cv_valid) > 1 and selected_school in _cv_valid["시설물명"].values:
-                    from sklearn.metrics.pairwise import cosine_similarity as _cos_sim
-                    _cv_mat = _cv_valid[_cv_feats].values
-                    _sel_idx = _cv_valid[_cv_valid["시설물명"] == selected_school].index[0]
-                    _sel_vec = _cv_valid.loc[_sel_idx, _cv_feats].values.reshape(1, -1)
-                    _sims = _cos_sim(_sel_vec, _cv_mat)[0]
-                    _cv_valid["유사도"] = _sims
-                    _similar = _cv_valid[_cv_valid["시설물명"] != selected_school].nlargest(5, "유사도")
-
-                    _sim_cols = st.columns(5)
-                    for _si, (_, _sr) in enumerate(_similar.iterrows()):
-                        with _sim_cols[_si]:
-                            _s_rv = _sr["시설물명"].replace(" ", "_")
-                            _s_path = DATA_DIR / "roadview" / f"{_s_rv}_북쪽.jpg"
-                            if not _s_path.exists():
-                                _s_path = DATA_DIR / "roadview" / f"{_sr['시설물명']}_북쪽.jpg"
-                            if _s_path.exists():
-                                st.image(str(_s_path), use_container_width=True)
-                            _s_grade = _sr.get("등급", _sr.get("등급_V6", "?"))
-                            _s_color = GRADE_COLORS.get(_s_grade, "#999")
-                            st.markdown(
-                                f'<div style="text-align:center;font-size:12px;">'
-                                f'<b>{_sr["시설물명"]}</b><br>'
-                                f'<span style="background:{_s_color};color:#fff;padding:1px 8px;'
-                                f'border-radius:10px;font-size:11px;">{_s_grade}</span> '
-                                f'유사도 {_sr["유사도"]:.0%}</div>',
-                                unsafe_allow_html=True,
-                            )
-
-            else:
-                st.markdown(
-                    "<div style='background:#FEF9E7;padding:20px;border-radius:8px;"
-                    "text-align:center;color:#E67E22;margin-top:40px;'>"
-                    "사이드바에서 개별 시설을 선택하면<br>도로환경 레이더 차트와 로드뷰 이미지가 표시됩니다."
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-
-        # ── (e) A등급 vs D등급 로드뷰 비교 (성남시 전용) ──
-        st.markdown("---")
-        if selected_city != "성남시":
-            st.info("A등급 vs D등급 로드뷰 비교는 성남시에서만 지원됩니다.")
-        _a_schools = df_cv[df_cv["등급"] == "A"].copy()
-        _d_schools = df_cv[df_cv["등급"] == "D"].copy()
-        if selected_city == "성남시" and len(_a_schools) > 0 and len(_d_schools) > 0:
-            st.markdown("##### A등급 vs D등급 도로환경 비교")
-            st.caption("안전등급 최상위(A)와 최하위(D) 학교의 로드뷰 · CV 지표를 직접 비교합니다.")
-            # 대표 선정: A등급 중 활성_안전점수 최고, D등급 중 최저
-            _a_rep = _a_schools.sort_values("활성_안전점수", ascending=False).iloc[0]
-            _d_rep = _d_schools.sort_values("활성_안전점수", ascending=True).iloc[0]
-
-            _ad_col1, _ad_col2 = st.columns(2)
-
-            for _ad_col, _ad_row, _ad_label, _ad_border, _ad_bg in [
-                (_ad_col1, _a_rep, "A등급 (최상위)", "#27AE60", "#EAFAF1"),
-                (_ad_col2, _d_rep, "D등급 (최하위)", "#E74C3C", "#FDEDEC"),
-            ]:
-                with _ad_col:
-                    st.markdown(
-                        f'<div style="background:{_ad_bg};padding:12px 14px;border-radius:10px;'
-                        f'border:2px solid {_ad_border};margin-bottom:8px;">'
-                        f'<div style="font-weight:700;color:{_ad_border};font-size:15px;'
-                        f'text-align:center;margin-bottom:6px;">{_ad_label}</div>'
-                        f'<div style="text-align:center;font-size:13px;color:#2C3E50;'
-                        f'font-weight:600;">{_ad_row["시설물명"]}</div></div>',
-                        unsafe_allow_html=True,
-                    )
-                    _ad_rv = _ad_row["시설물명"].replace(" ", "_")
-                    _ad_path = DATA_DIR / "roadview" / f"{_ad_rv}_북쪽.jpg"
-                    if not _ad_path.exists():
-                        _ad_path = DATA_DIR / "roadview" / f"{_ad_row['시설물명']}_북쪽.jpg"
-                    if _ad_path.exists():
-                        st.image(str(_ad_path), use_container_width=True)
-                    else:
-                        st.info("로드뷰 이미지 없음")
-
-                    # CV 게이지 비교 (소형)
-                    _ad_items = [
-                        ("넓은도로", _ad_row["CV_도로폭확률"], "#E74C3C"),
-                        ("차단시설", _ad_row["CV_분리장치확률"], "#27AE60"),
-                        ("도로비율", _ad_row["CV_도로상대폭"], "#3498DB"),
-                        ("보행공간", _ad_row["CV_보행공간비율"], "#8E44AD"),
-                        ("주정차", min(_ad_row["CV_주정차밀도"] / 5, 1.0), "#F39C12"),
-                    ]
-                    _ad_html = ""
-                    for _al, _av, _ac in _ad_items:
-                        _ap = min(_av * 100, 100)
-                        _ad_html += (
-                            f'<div style="margin-bottom:6px;">'
-                            f'<div style="display:flex;justify-content:space-between;font-size:11px;">'
-                            f'<span>{_al}</span><span>{_ap:.0f}%</span></div>'
-                            f'<div style="background:#ECF0F1;border-radius:4px;height:10px;overflow:hidden;">'
-                            f'<div style="width:{_ap:.0f}%;height:100%;background:{_ac};border-radius:4px;">'
-                            f'</div></div></div>'
-                        )
-                    st.markdown(
-                        f'<div style="padding:8px 10px;border-radius:8px;'
-                        f'border:1px solid #D5D8DC;">{_ad_html}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-            # 지표 차이 요약
-            st.markdown(
-                '<div style="background:#F8F9F9;padding:10px 14px;border-radius:8px;'
-                'margin-top:8px;font-size:13px;color:#2C3E50;">'
-                '<b>핵심 차이:</b> A등급은 차단시설·보행공간이 높고, 주정차 밀도가 낮은 패턴을 보입니다. '
-                'D등급은 도로폭이 넓어도 보행자 보호 시설이 부족합니다.</div>',
-                unsafe_allow_html=True,
-            )
-
-
-    # ── (f) V6 점수 vs 위험확률 점수 비교 ──
+    # V6 vs 위험확률 비교 (성남시 + RM 데이터 있을 때)
     if selected_city == "성남시" and "RM_safety_score" in df_sn.columns:
         _cmp = df_sn.dropna(subset=["RM_safety_score"]).copy()
         if len(_cmp) > 0:
-            st.markdown("---")
-            st.markdown("##### V6 점수 vs 위험확률 점수 비교")
-            st.caption(f"위험확률 모델이 적용된 {len(_cmp)}개소 대상 비교")
-
+            st.markdown(f"**V6 점수 vs 위험확률 점수 비교** ({len(_cmp)}개소)")
             _cmp_c1, _cmp_c2 = st.columns(2)
             with _cmp_c1:
                 fig_scatter = px.scatter(
@@ -2019,22 +1868,20 @@ with tab_cv:
                         "RM_safety_score": "위험확률 안전점수",
                         "RM_safety_grade": "위험확률 등급",
                     },
-                    title="V6 점수 vs 위험확률 점수 산점도",
+                    title="V6 vs 위험확률 점수 산점도",
                 )
                 fig_scatter.add_shape(
                     type="line", x0=0, y0=0, x1=100, y1=100,
                     line=dict(dash="dash", color="#999"),
                 )
-                fig_scatter.update_layout(**PLOTLY_LAYOUT, height=420)
+                fig_scatter.update_layout(**PLOTLY_LAYOUT, height=380)
                 st.plotly_chart(fig_scatter, use_container_width=True)
 
             with _cmp_c2:
-                # 등급 변화 교차표
                 _cross = pd.crosstab(
                     _cmp["등급_V6"].rename("V6 등급"),
                     _cmp["RM_safety_grade"].rename("위험확률 등급"),
                 ).reindex(index=["A", "B", "C", "D"], columns=["A", "B", "C", "D"], fill_value=0)
-
                 fig_heat = px.imshow(
                     _cross.values,
                     x=["A", "B", "C", "D"], y=["A", "B", "C", "D"],
@@ -2043,10 +1890,9 @@ with tab_cv:
                     color_continuous_scale="YlOrRd",
                     text_auto=True,
                 )
-                fig_heat.update_layout(**PLOTLY_LAYOUT, height=420)
+                fig_heat.update_layout(**PLOTLY_LAYOUT, height=380)
                 st.plotly_chart(fig_heat, use_container_width=True)
 
-            # 등급 변화 요약
             _same = (_cmp["등급_V6"] == _cmp["RM_safety_grade"]).sum()
             _diff = len(_cmp) - _same
             st.markdown(
@@ -2054,11 +1900,366 @@ with tab_cv:
                 f'font-size:13px;color:#2C3E50;">'
                 f'<b>등급 일치:</b> {_same}개소 ({_same/len(_cmp)*100:.0f}%) | '
                 f'<b>등급 변화:</b> {_diff}개소 ({_diff/len(_cmp)*100:.0f}%) | '
-                f'V6 점수 범위: {_cmp["최종안전점수_V6"].min():.1f}~{_cmp["최종안전점수_V6"].max():.1f} | '
-                f'위험확률 점수 범위: {_cmp["RM_safety_score"].min():.1f}~{_cmp["RM_safety_score"].max():.1f}'
+                f'V6: {_cmp["최종안전점수_V6"].min():.1f}~{_cmp["최종안전점수_V6"].max():.1f} | '
+                f'위험확률: {_cmp["RM_safety_score"].min():.1f}~{_cmp["RM_safety_score"].max():.1f}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+    st.markdown("---")
+
+    # ── 5. 도로환경 분석 (CV) ──
+    st.markdown("##### 도로환경 분석 (CV)")
+    cv_cols = ["CV_도로폭확률", "CV_분리장치확률", "CV_도로상대폭", "CV_보행공간비율", "CV_주정차밀도"]
+    cv_labels = ["넓은 도로 확률", "분리장치 확률", "도로 상대폭", "보행공간 비율", "주정차 밀도"]
+    df_cv = df_sn.dropna(subset=["CV_도로폭확률"])
+
+    cv_col1, cv_col2 = st.columns(2)
+
+    with cv_col1:
+        cv_grade = df_cv.groupby("등급")[cv_cols].mean()
+        cv_grade.columns = cv_labels
+        cv_grade = cv_grade.reindex(["A", "B", "C", "D"])
+        cv_melt = cv_grade.reset_index().melt(
+            id_vars="등급", var_name="특성", value_name="값",
+        )
+        fig_cv_grade = px.bar(
+            cv_melt[cv_melt["특성"].isin(["넓은 도로 확률", "분리장치 확률"])],
+            x="등급", y="값", color="특성", barmode="group",
+            title="등급별 도로폭 vs 분리장치 확률",
+            color_discrete_map={
+                "넓은 도로 확률": "#E74C3C", "분리장치 확률": "#F39C12",
+            },
+        )
+        fig_cv_grade.update_layout(**PLOTLY_LAYOUT, height=380)
+        st.plotly_chart(fig_cv_grade, use_container_width=True)
+
+    with cv_col2:
+        if selected_city != "성남시":
+            st.markdown(
+                "<div style='background:#FEF9E7;padding:20px;border-radius:8px;"
+                "text-align:center;color:#E67E22;margin-top:40px;'>"
+                "개별 시설 CV 분석은 성남시에서만 지원됩니다."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        elif selected_school != "(전체)" and selected_school in df_cv["시설물명"].values:
+            cv_row = df_cv[df_cv["시설물명"] == selected_school].iloc[0]
+            cv_avg = df_cv[cv_cols].mean()
+
+            cv_radar_vals = [
+                cv_row["CV_도로폭확률"] * 100,
+                cv_row["CV_분리장치확률"] * 100,
+                cv_row["CV_도로상대폭"] * 200,
+                cv_row["CV_보행공간비율"] * 300,
+                min(cv_row["CV_주정차밀도"] * 20, 100),
+            ]
+            cv_avg_vals = [
+                cv_avg["CV_도로폭확률"] * 100,
+                cv_avg["CV_분리장치확률"] * 100,
+                cv_avg["CV_도로상대폭"] * 200,
+                cv_avg["CV_보행공간비율"] * 300,
+                min(cv_avg["CV_주정차밀도"] * 20, 100),
+            ]
+            cv_theta = cv_labels + [cv_labels[0]]
+
+            fig_cv_radar = go.Figure()
+            fig_cv_radar.add_trace(go.Scatterpolar(
+                r=cv_radar_vals + [cv_radar_vals[0]],
+                theta=cv_theta,
+                fill="toself", name=selected_school,
+                fillcolor="rgba(108,52,131,0.2)",
+                line=dict(color="#E67E22", width=2),
+            ))
+            fig_cv_radar.add_trace(go.Scatterpolar(
+                r=cv_avg_vals + [cv_avg_vals[0]],
+                theta=cv_theta,
+                fill="toself", name="전체 평균",
+                fillcolor="rgba(46,134,193,0.1)",
+                line=dict(color="#F39C12", width=1, dash="dash"),
+            ))
+            fig_cv_radar.update_layout(
+                **PLOTLY_LAYOUT,
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#FDEBD0"),
+                    angularaxis=dict(gridcolor="#FDEBD0"),
+                    bgcolor="#FAFCFF",
+                ),
+                title=f"{selected_school} 도로환경 프로필",
+                height=380, showlegend=True,
+                legend=dict(x=0.01, y=0.99),
+            )
+            st.plotly_chart(fig_cv_radar, use_container_width=True)
+
+        else:
+            st.markdown(
+                "<div style='background:#FEF9E7;padding:20px;border-radius:8px;"
+                "text-align:center;color:#E67E22;margin-top:40px;'>"
+                "사이드바에서 개별 시설을 선택하면<br>도로환경 레이더 차트와 로드뷰 이미지가 표시됩니다."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+    # 로드뷰 + CV 게이지 (개별 시설 선택 시)
+    if selected_city == "성남시" and selected_school != "(전체)" and selected_school in df_cv["시설물명"].values:
+        cv_row = df_cv[df_cv["시설물명"] == selected_school].iloc[0]
+        _cv_rv_name = selected_school.replace(" ", "_")
+        _cv_rv_path = DATA_DIR / "roadview" / f"{_cv_rv_name}_북쪽.jpg"
+        if not _cv_rv_path.exists():
+            _cv_rv_path = DATA_DIR / "roadview" / f"{selected_school}_북쪽.jpg"
+
+        st.markdown(f"**{selected_school} 로드뷰 + CV 분석**")
+        _rv_col, _gauge_col = st.columns([3, 2])
+        with _rv_col:
+            if _cv_rv_path.exists():
+                st.image(str(_cv_rv_path), caption=f"{selected_school} 북쪽 방향", use_container_width=True)
+            else:
+                st.info("로드뷰 이미지 없음")
+        with _gauge_col:
+            _cv_items = [
+                ("넓은 도로", cv_row["CV_도로폭확률"], "#E74C3C", "높을수록 넓은 도로"),
+                ("차단시설", cv_row["CV_분리장치확률"], "#27AE60", "높을수록 안전"),
+                ("도로 비율", cv_row["CV_도로상대폭"], "#3498DB", "화면 내 도로 면적"),
+                ("보행공간", cv_row["CV_보행공간비율"], "#8E44AD", "높을수록 보행자 안전"),
+                ("주정차", min(cv_row["CV_주정차밀도"] / 5, 1.0), "#F39C12", "높을수록 시야 방해"),
+            ]
+            _gauge_html = ""
+            for _lbl, _val, _clr, _desc in _cv_items:
+                _pct = min(_val * 100, 100)
+                _gauge_html += (
+                    f'<div style="margin-bottom:10px;">'
+                    f'<div style="display:flex;justify-content:space-between;font-size:12px;color:#2C3E50;">'
+                    f'<span style="font-weight:600;">{_lbl}</span>'
+                    f'<span>{_pct:.0f}%</span></div>'
+                    f'<div style="background:#ECF0F1;border-radius:6px;height:14px;overflow:hidden;">'
+                    f'<div style="width:{_pct:.0f}%;height:100%;background:{_clr};border-radius:6px;'
+                    f'transition:width 0.3s;"></div></div>'
+                    f'<div style="font-size:10px;color:#7F8C8D;margin-top:1px;">{_desc}</div>'
+                    f'</div>'
+                )
+            st.markdown(
+                f'<div style="background:#FAFCFF;padding:14px 16px;border-radius:10px;'
+                f'border:1px solid #F5CBA7;">'
+                f'<div style="font-weight:700;color:#2C3E50;margin-bottom:10px;font-size:14px;">'
+                f'CV 분석 지표</div>{_gauge_html}</div>',
+                unsafe_allow_html=True,
+            )
+
+        # 유사 도로환경 학교
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"**유사 도로환경 학교** (CV 코사인 유사도)")
+        _cv_feats = cv_cols
+        _cv_valid = df_cv.dropna(subset=_cv_feats).copy()
+        if len(_cv_valid) > 1 and selected_school in _cv_valid["시설물명"].values:
+            from sklearn.metrics.pairwise import cosine_similarity as _cos_sim
+            _cv_mat = _cv_valid[_cv_feats].values
+            _sel_idx = _cv_valid[_cv_valid["시설물명"] == selected_school].index[0]
+            _sel_vec = _cv_valid.loc[_sel_idx, _cv_feats].values.reshape(1, -1)
+            _sims = _cos_sim(_sel_vec, _cv_mat)[0]
+            _cv_valid["유사도"] = _sims
+            _similar = _cv_valid[_cv_valid["시설물명"] != selected_school].nlargest(5, "유사도")
+
+            _sim_cols = st.columns(5)
+            for _si, (_, _sr) in enumerate(_similar.iterrows()):
+                with _sim_cols[_si]:
+                    _s_rv = _sr["시설물명"].replace(" ", "_")
+                    _s_path = DATA_DIR / "roadview" / f"{_s_rv}_북쪽.jpg"
+                    if not _s_path.exists():
+                        _s_path = DATA_DIR / "roadview" / f"{_sr['시설물명']}_북쪽.jpg"
+                    if _s_path.exists():
+                        st.image(str(_s_path), use_container_width=True)
+                    _s_grade = _sr.get("등급", _sr.get("등급_V6", "?"))
+                    _s_color = GRADE_COLORS.get(_s_grade, "#999")
+                    st.markdown(
+                        f'<div style="text-align:center;font-size:12px;">'
+                        f'<b>{_sr["시설물명"]}</b><br>'
+                        f'<span style="background:{_s_color};color:#fff;padding:1px 8px;'
+                        f'border-radius:10px;font-size:11px;">{_s_grade}</span> '
+                        f'유사도 {_sr["유사도"]:.0%}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+    # A등급 vs D등급 비교
+    _a_schools = df_cv[df_cv["등급"] == "A"].copy()
+    _d_schools = df_cv[df_cv["등급"] == "D"].copy()
+    if selected_city == "성남시" and len(_a_schools) > 0 and len(_d_schools) > 0:
+        st.markdown("---")
+        st.markdown("##### A등급 vs D등급 도로환경 비교")
+        _a_rep = _a_schools.sort_values("활성_안전점수", ascending=False).iloc[0]
+        _d_rep = _d_schools.sort_values("활성_안전점수", ascending=True).iloc[0]
+
+        _ad_col1, _ad_col2 = st.columns(2)
+
+        for _ad_col, _ad_row, _ad_label, _ad_border, _ad_bg in [
+            (_ad_col1, _a_rep, "A등급 (최상위)", "#27AE60", "#EAFAF1"),
+            (_ad_col2, _d_rep, "D등급 (최하위)", "#E74C3C", "#FDEDEC"),
+        ]:
+            with _ad_col:
+                st.markdown(
+                    f'<div style="background:{_ad_bg};padding:12px 14px;border-radius:10px;'
+                    f'border:2px solid {_ad_border};margin-bottom:8px;">'
+                    f'<div style="font-weight:700;color:{_ad_border};font-size:15px;'
+                    f'text-align:center;margin-bottom:6px;">{_ad_label}</div>'
+                    f'<div style="text-align:center;font-size:13px;color:#2C3E50;'
+                    f'font-weight:600;">{_ad_row["시설물명"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                _ad_rv = _ad_row["시설물명"].replace(" ", "_")
+                _ad_path = DATA_DIR / "roadview" / f"{_ad_rv}_북쪽.jpg"
+                if not _ad_path.exists():
+                    _ad_path = DATA_DIR / "roadview" / f"{_ad_row['시설물명']}_북쪽.jpg"
+                if _ad_path.exists():
+                    st.image(str(_ad_path), use_container_width=True)
+                else:
+                    st.info("로드뷰 이미지 없음")
+
+                _ad_items = [
+                    ("넓은도로", _ad_row["CV_도로폭확률"], "#E74C3C"),
+                    ("차단시설", _ad_row["CV_분리장치확률"], "#27AE60"),
+                    ("도로비율", _ad_row["CV_도로상대폭"], "#3498DB"),
+                    ("보행공간", _ad_row["CV_보행공간비율"], "#8E44AD"),
+                    ("주정차", min(_ad_row["CV_주정차밀도"] / 5, 1.0), "#F39C12"),
+                ]
+                _ad_html = ""
+                for _al, _av, _ac in _ad_items:
+                    _ap = min(_av * 100, 100)
+                    _ad_html += (
+                        f'<div style="margin-bottom:6px;">'
+                        f'<div style="display:flex;justify-content:space-between;font-size:11px;">'
+                        f'<span>{_al}</span><span>{_ap:.0f}%</span></div>'
+                        f'<div style="background:#ECF0F1;border-radius:4px;height:10px;overflow:hidden;">'
+                        f'<div style="width:{_ap:.0f}%;height:100%;background:{_ac};border-radius:4px;">'
+                        f'</div></div></div>'
+                    )
+                st.markdown(
+                    f'<div style="padding:8px 10px;border-radius:8px;'
+                    f'border:1px solid #D5D8DC;">{_ad_html}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        st.markdown(
+            '<div style="background:#F8F9F9;padding:10px 14px;border-radius:8px;'
+            'margin-top:8px;font-size:13px;color:#2C3E50;">'
+            '<b>핵심 차이:</b> A등급은 차단시설·보행공간이 높고, 주정차 밀도가 낮은 패턴을 보입니다. '
+            'D등급은 도로폭이 넓어도 보행자 보호 시설이 부족합니다.</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # ── 6. 참고 정보 ──
+    _ref_c1, _ref_c2 = st.columns(2)
+    with _ref_c1:
+        st.markdown("##### 광명시 시뮬레이션 방법")
+        st.markdown(
+            f'<div style="background:#FEF9E7;padding:14px 18px;border-radius:10px;'
+            f'border-left:4px solid #F39C12;">'
+            f'<span style="font-size:13px;color:#2C3E50;">'
+            f'<b>안전점수 예측 모델:</b> 성남시 데이터로 학습한 '
+            f'LinearRegression (R² = {model_r2:.3f})을 광명시 51개소에 적용<br><br>'
+            f'<b>입력:</b> 9개 시설물 + 발생건수 + 어린이비율<br>'
+            f'<b>출력:</b> 예상 안전점수 → 사분위 등급<br><br>'
+            f'<b>참고:</b> 광명시에 없는 시설 데이터는 0 처리'
+            f'</span></div>',
+            unsafe_allow_html=True,
+        )
+    with _ref_c2:
+        st.markdown("##### 데이터 출처")
+        st.markdown(
+            '<div style="background:#FEF5E7;padding:14px 18px;border-radius:10px;">'
+            '<table style="width:100%;font-size:12px;color:#2C3E50;border-collapse:collapse;">'
+            '<tr style="background:#F5CBA7;font-weight:600;">'
+            '<td style="padding:6px 10px;">출처</td>'
+            '<td style="padding:6px 10px;">내용</td>'
+            '<td style="padding:6px 10px;">기간</td></tr>'
+            '<tr><td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">공공데이터포털</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">스쿨존 목록, 9개 시설물</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
+            '<tr><td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">도로교통공단</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">교통사고 통계</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">2018~2023</td></tr>'
+            '<tr><td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">경기데이터드림</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">연령별 인구</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
+            '<tr><td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">광명시</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">시설물·사고 데이터</td>'
+            '<td style="padding:5px 10px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
+            '<tr><td style="padding:5px 10px;">카카오맵 로드뷰</td>'
+            '<td style="padding:5px 10px;">도로환경 이미지</td>'
+            '<td style="padding:5px 10px;">2023~2024</td></tr>'
+            '</table></div>',
+            unsafe_allow_html=True,
+        )
+
+    with st.expander("사용 변수 상세 목록"):
+        _var_data = [
+            {"카테고리": "시설", "변수명": "도로적색표면", "설명": "보호구역 내 적색 도로 표면 개수", "출처": "공공데이터포털", "범위": "0~40+"},
+            {"카테고리": "시설", "변수명": "신호등", "설명": "보호구역 내 교통 신호등 수", "출처": "공공데이터포털", "범위": "0~20+"},
+            {"카테고리": "시설", "변수명": "횡단보도", "설명": "보호구역 내 횡단보도 수", "출처": "공공데이터포털", "범위": "0~15+"},
+            {"카테고리": "시설", "변수명": "도로안전표지", "설명": "속도 제한, 주의 표지 등", "출처": "공공데이터포털", "범위": "0~15+"},
+            {"카테고리": "시설", "변수명": "생활안전CCTV", "설명": "보호구역 300m 내 CCTV 수", "출처": "공공데이터포털", "범위": "0~50+"},
+            {"카테고리": "시설", "변수명": "무인교통단속카메라", "설명": "과속/신호 단속 카메라 수", "출처": "공공데이터포털", "범위": "0~10"},
+            {"카테고리": "시설", "변수명": "보호구역표지판", "설명": "어린이 보호구역 안내 표지판", "출처": "공공데이터포털", "범위": "0~80+"},
+            {"카테고리": "시설", "변수명": "옐로카펫", "설명": "횡단보도 앞 노란색 안전 구역", "출처": "공공데이터포털", "범위": "0~5"},
+            {"카테고리": "시설", "변수명": "무단횡단방지펜스", "설명": "무단횡단 방지용 보행자 펜스", "출처": "공공데이터포털", "범위": "0~30+"},
+            {"카테고리": "사고", "변수명": "발생건수", "설명": "2018~2023 스쿨존 교통사고", "출처": "도로교통공단", "범위": "0~38"},
+            {"카테고리": "사고", "변수명": "사고심각도", "설명": "사망x10 + 중상x5 + 경상x3 + 부상x1", "출처": "산출", "범위": "0~200+"},
+            {"카테고리": "인구", "변수명": "어린이비율", "설명": "행정동 0~14세 인구 비율 (%)", "출처": "경기데이터드림", "범위": "5~25%"},
+            {"카테고리": "CV", "변수명": "CV_도로폭확률", "설명": "CNN 예측 넓은 도로 확률", "출처": "카카오맵 로드뷰", "범위": "0~1"},
+            {"카테고리": "CV", "변수명": "CV_분리장치확률", "설명": "CNN 예측 분리 장치 확률", "출처": "카카오맵 로드뷰", "범위": "0~1"},
+            {"카테고리": "CV", "변수명": "CV_도로상대폭", "설명": "이미지 내 도로 비율", "출처": "카카오맵 로드뷰", "범위": "0~1"},
+            {"카테고리": "CV", "변수명": "CV_보행공간비율", "설명": "이미지 내 보행 공간 비율", "출처": "카카오맵 로드뷰", "범위": "0~1"},
+            {"카테고리": "CV", "변수명": "CV_주정차밀도", "설명": "이미지 내 주정차 차량 밀도", "출처": "카카오맵 로드뷰", "범위": "0~10+"},
+        ]
+        st.dataframe(pd.DataFrame(_var_data), use_container_width=True, hide_index=True)
+
+    with st.expander("전처리: 스케일링 전후 Skewness 비교"):
+        st.caption("skewness > 1인 변수에 Log(x+1) 변환 → StandardScaler 적용")
+        _sum_sn_path = DATA_DIR / "feature_summary_sn.csv"
+        _sum_gm_path = DATA_DIR / "feature_summary_gm.csv"
+        if _sum_sn_path.exists() and _sum_gm_path.exists():
+            _sum_sn = pd.read_csv(_sum_sn_path, index_col=0)
+            _sum_gm = pd.read_csv(_sum_gm_path, index_col=0)
+
+            _sk_col1, _sk_col2 = st.columns(2)
+            for _sk_col, _sk_df, _sk_title in [
+                (_sk_col1, _sum_sn, "성남시 (142개소)"),
+                (_sk_col2, _sum_gm, "광명시 (51개소)"),
+            ]:
+                with _sk_col:
+                    _sk_labels = _sk_df.index.tolist()
+                    fig_sk = go.Figure()
+                    fig_sk.add_trace(go.Bar(
+                        name="변환 전", x=_sk_labels, y=_sk_df["skewness_전"],
+                        marker_color="#E67E22", opacity=0.7,
+                    ))
+                    fig_sk.add_trace(go.Bar(
+                        name="변환 후", x=_sk_labels, y=_sk_df["skewness_후"],
+                        marker_color="#27AE60", opacity=0.9,
+                    ))
+                    fig_sk.add_hline(y=1.0, line_dash="dash", line_color="#E74C3C",
+                                     annotation_text="skew=1", annotation_position="top left",
+                                     annotation_font_size=10)
+                    fig_sk.update_layout(
+                        **PLOTLY_LAYOUT, height=350, barmode="group",
+                        title=_sk_title,
+                        xaxis=dict(title="", tickangle=-45, tickfont=dict(size=9)),
+                        yaxis=dict(title="Skewness"),
+                        legend=dict(x=0.01, y=0.99, font=dict(size=10)),
+                        margin=dict(b=80),
+                    )
+                    st.plotly_chart(fig_sk, use_container_width=True)
+
+            _log_vars = _sum_sn[_sum_sn["변환방식"] == "Log+Standard"].index.tolist()
+            st.markdown(
+                f'<div style="background:#EAFAF1;padding:10px 14px;border-radius:8px;'
+                f'font-size:13px;color:#2C3E50;">'
+                f'<b>Log 적용:</b> {", ".join(_log_vars)} | '
+                f'<b>Standard만:</b> 나머지 {len(_sum_sn) - len(_log_vars)}개</div>',
+                unsafe_allow_html=True,
+            )
+
+
 
     # ============================
     # Tab 5: 동네정보
@@ -2286,321 +2487,6 @@ with tab_sim:
             )
 
 
-# ============================
-# Tab 7: 분석 방법론
-# ============================
-with tab_method:
-    st.markdown("### 분석 방법론")
-    st.caption("스쿨존 안전등급 분석에 사용된 데이터, 변수, 모델을 설명합니다.")
-
-    # ── (a) 프로젝트 개요 ──
-    st.markdown("##### 프로젝트 개요")
-    st.markdown(
-        '<div style="background:#FEF5E7;padding:16px 20px;border-radius:10px;'
-        'border-left:4px solid #E67E22;margin-bottom:16px;">'
-        '<span style="font-size:14px;color:#2C3E50;">'
-        '<b style="color:#2C3E50;">목표:</b> 어린이 보호구역(스쿨존)의 '
-        '안전등급을 데이터 기반으로 분석하여, 시설물 투자 우선순위를 제공합니다.<br><br>'
-        '<b style="color:#2C3E50;">분석 대상:</b> 성남시 142개소 + 광명시 51개소<br>'
-        '<b style="color:#2C3E50;">분석 기간:</b> 2018~2023년 사고 데이터 + 2024년 시설 현황<br>'
-        '<b style="color:#2C3E50;">핵심 메시지:</b> 스쿨존 사고는 <b>도로 구조 + 정책(시설) + 노출(어린이)</b>의 결합 결과이며, '
-        '시설물 투입이 사고 예방의 핵심이다.'
-        '</span></div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── (a-1) 시스템 아키텍처 ──
-    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 시스템 아키텍처")
-    _arch_path = DATA_DIR / "system_architecture.jpg"
-    if _arch_path.exists():
-        st.image(str(_arch_path), caption="데이터 수집 → AI 비전 분석 → ML 통합 분석 → 서비스 인터페이스", use_container_width=True)
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (b) 사용 변수 목록 테이블 ──
-    st.markdown("##### 사용 변수 목록")
-
-    _var_data = [
-        # 시설 변수
-        {"카테고리": "시설", "변수명": "도로적색표면", "설명": "보호구역 내 적색 도로 표면 개수", "출처": "공공데이터포털", "범위": "0~40+"},
-        {"카테고리": "시설", "변수명": "신호등", "설명": "보호구역 내 교통 신호등 수", "출처": "공공데이터포털", "범위": "0~20+"},
-        {"카테고리": "시설", "변수명": "횡단보도", "설명": "보호구역 내 횡단보도 수", "출처": "공공데이터포털", "범위": "0~15+"},
-        {"카테고리": "시설", "변수명": "도로안전표지", "설명": "속도 제한, 주의 표지 등 안전표지 수", "출처": "공공데이터포털", "범위": "0~15+"},
-        {"카테고리": "시설", "변수명": "생활안전CCTV", "설명": "보호구역 300m 내 생활안전 CCTV 수", "출처": "공공데이터포털", "범위": "0~50+"},
-        {"카테고리": "시설", "변수명": "무인교통단속카메라", "설명": "보호구역 내 과속/신호 단속 카메라 수", "출처": "공공데이터포털", "범위": "0~10"},
-        {"카테고리": "시설", "변수명": "보호구역표지판", "설명": "어린이 보호구역 안내 표지판 수", "출처": "공공데이터포털", "범위": "0~80+"},
-        {"카테고리": "시설", "변수명": "옐로카펫", "설명": "횡단보도 앞 노란색 안전 구역 수", "출처": "공공데이터포털", "범위": "0~5"},
-        {"카테고리": "시설", "변수명": "무단횡단방지펜스", "설명": "무단횡단 방지용 보행자 펜스 수", "출처": "공공데이터포털", "범위": "0~30+"},
-        # 사고 변수
-        {"카테고리": "사고", "변수명": "발생건수", "설명": "2018~2023 스쿨존 교통사고 건수", "출처": "도로교통공단", "범위": "0~38"},
-        {"카테고리": "사고", "변수명": "사고심각도", "설명": "사망x10 + 중상x5 + 경상x3 + 부상x1", "출처": "산출", "범위": "0~200+"},
-        # 인구 변수
-        {"카테고리": "인구", "변수명": "어린이비율", "설명": "행정동 0~14세 어린이 인구 비율 (%)", "출처": "경기데이터드림", "범위": "5~25%"},
-        # CV 변수
-        {"카테고리": "CV (도로환경)", "변수명": "CV_도로폭확률", "설명": "CNN 예측 넓은 도로 확률", "출처": "카카오맵 로드뷰", "범위": "0~1"},
-        {"카테고리": "CV (도로환경)", "변수명": "CV_분리장치확률", "설명": "CNN 예측 차도-보도 분리 장치 확률", "출처": "카카오맵 로드뷰", "범위": "0~1"},
-        {"카테고리": "CV (도로환경)", "변수명": "CV_도로상대폭", "설명": "이미지 내 도로가 차지하는 비율", "출처": "카카오맵 로드뷰", "범위": "0~1"},
-        {"카테고리": "CV (도로환경)", "변수명": "CV_보행공간비율", "설명": "이미지 내 보행 공간 비율", "출처": "카카오맵 로드뷰", "범위": "0~1"},
-        {"카테고리": "CV (도로환경)", "변수명": "CV_주정차밀도", "설명": "이미지 내 주정차 차량 밀도", "출처": "카카오맵 로드뷰", "범위": "0~10+"},
-    ]
-    st.dataframe(pd.DataFrame(_var_data), use_container_width=True, hide_index=True)
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (b-1) 스케일링 전후 비교 차트 ──
-    st.markdown("##### 전처리: 스케일링 전후 Skewness 비교")
-    st.caption("skewness > 1인 변수에 Log(x+1) 변환 → StandardScaler 적용. 나머지는 StandardScaler만 적용.")
-
-    _sum_sn_path = DATA_DIR / "feature_summary_sn.csv"
-    _sum_gm_path = DATA_DIR / "feature_summary_gm.csv"
-    if _sum_sn_path.exists() and _sum_gm_path.exists():
-        _sum_sn = pd.read_csv(_sum_sn_path, index_col=0)
-        _sum_gm = pd.read_csv(_sum_gm_path, index_col=0)
-
-        _sk_col1, _sk_col2 = st.columns(2)
-
-        for _sk_col, _sk_df, _sk_title, _sk_clr_before, _sk_clr_after in [
-            (_sk_col1, _sum_sn, "성남시 (142개소)", "#E67E22", "#27AE60"),
-            (_sk_col2, _sum_gm, "광명시 (51개소)", "#E67E22", "#27AE60"),
-        ]:
-            with _sk_col:
-                _sk_labels = _sk_df.index.tolist()
-                fig_sk = go.Figure()
-                fig_sk.add_trace(go.Bar(
-                    name="변환 전", x=_sk_labels, y=_sk_df["skewness_전"],
-                    marker_color=_sk_clr_before, opacity=0.7,
-                ))
-                fig_sk.add_trace(go.Bar(
-                    name="변환 후", x=_sk_labels, y=_sk_df["skewness_후"],
-                    marker_color=_sk_clr_after, opacity=0.9,
-                ))
-                fig_sk.add_hline(y=1.0, line_dash="dash", line_color="#E74C3C",
-                                 annotation_text="skew=1 기준", annotation_position="top left",
-                                 annotation_font_size=10)
-                fig_sk.update_layout(
-                    **PLOTLY_LAYOUT, height=350, barmode="group",
-                    title=_sk_title,
-                    xaxis=dict(title="", tickangle=-45, tickfont=dict(size=9)),
-                    yaxis=dict(title="Skewness"),
-                    legend=dict(x=0.01, y=0.99, font=dict(size=10)),
-                    margin=dict(b=80),
-                )
-                st.plotly_chart(fig_sk, use_container_width=True)
-
-        # 변환 방식 요약
-        _log_vars = _sum_sn[_sum_sn["변환방식"] == "Log+Standard"].index.tolist()
-        st.markdown(
-            f'<div style="background:#EAFAF1;padding:10px 14px;border-radius:8px;'
-            f'font-size:13px;color:#2C3E50;margin-bottom:16px;">'
-            f'<b>Log(x+1) + StandardScaler 적용 변수:</b> {", ".join(_log_vars)}<br>'
-            f'<b>StandardScaler만 적용:</b> 나머지 {len(_sum_sn) - len(_log_vars)}개 변수</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (c) 안전점수 계산 방법 ──
-    st.markdown("##### 안전점수 계산 방법")
-    st.markdown(
-        '<div style="background:#FEF9E7;padding:16px 20px;border-radius:10px;'
-        'border-left:4px solid #F39C12;margin-bottom:12px;">'
-        '<b style="color:#2C3E50;font-size:15px;">안전점수 산출 공식</b><br><br>'
-        '<span style="font-size:14px;color:#2C3E50;">'
-        '<code style="background:#F5CBA7;padding:6px 12px;border-radius:6px;font-size:14px;">'
-        '안전점수 = 기본(50) + 가산점(시설) + 가산점(보너스) - 감산점(사고+환경)'
-        '</code><br><br>'
-        '<b>가산점(시설):</b> 9개 시설물 보유량 기반 점수 (많을수록 가산)<br>'
-        '<b>가산점(보너스):</b> 어린이비율 등 환경적 보너스<br>'
-        '<b>감산점:</b> 사고 발생건수, 사고심각도 기반 감점'
-        '</span></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div style="background:#FEF5E7;padding:14px 18px;border-radius:10px;'
-        'border-left:4px solid #154360;margin-bottom:16px;">'
-        '<b style="color:#2C3E50;">등급 기준 (사분위수)</b><br>'
-        '<span style="font-size:13px;color:#2C3E50;">'
-        '<b style="color:#154360;">A등급 (우수)</b>: 상위 25% &nbsp;&nbsp;|&nbsp;&nbsp; '
-        '<b style="color:#2471A3;">B등급 (양호)</b>: 25~50% &nbsp;&nbsp;|&nbsp;&nbsp; '
-        '<b style="color:#85C1E9;">C등급 (보통)</b>: 50~75% &nbsp;&nbsp;|&nbsp;&nbsp; '
-        '<b style="color:#E74C3C;">D등급 (주의)</b>: 하위 25%'
-        '</span></div>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (d) 3단계 사고 예측 모델 ──
-    st.markdown("##### 3단계 사고 예측 모델")
-    st.markdown(
-        '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
-        # 1단계
-        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FEF9E7,#FCF3CF);'
-        'padding:14px 16px;border-radius:10px;border-top:4px solid #F39C12;">'
-        '<b style="color:#F39C12;font-size:15px;">1단계: 구조 모델</b><br>'
-        '<span style="font-size:12px;color:#2C3E50;">'
-        '카카오맵 로드뷰 이미지 분석<br>'
-        '5개 CV 변수 (도로폭, 분리장치, 보행공간 등)<br>'
-        'Binary 분류 (사고 부근 여부)<br>'
-        '<b>Logistic Regression</b>'
-        '</span></div>'
-        # 화살표
-        '<div style="display:flex;align-items:center;font-size:24px;color:#2C3E50;">&#10132;</div>'
-        # 2단계
-        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FDEDEC,#F9EBEA);'
-        'padding:14px 16px;border-radius:10px;border-top:4px solid #E74C3C;">'
-        '<b style="color:#E74C3C;font-size:15px;">2단계: 외부검증</b><br>'
-        '<span style="font-size:12px;color:#2C3E50;">'
-        '구조 위험도를 시설 데이터에 적용<br>'
-        '도로 구조 단독으로는 설명력 부족<br>'
-        '<b>AUC 하락 확인</b>'
-        '</span></div>'
-        # 화살표
-        '<div style="display:flex;align-items:center;font-size:24px;color:#2C3E50;">&#10132;</div>'
-        # 3단계
-        '<div style="flex:1;min-width:200px;background:linear-gradient(135deg,#FDEBD0,#EAFAF1);'
-        'padding:14px 16px;border-radius:10px;border-top:4px solid #27AE60;">'
-        '<b style="color:#27AE60;font-size:15px;">3단계: 통합 모델</b><br>'
-        '<span style="font-size:12px;color:#2C3E50;">'
-        '구조위험 + 9개 시설 + 어린이비율<br>'
-        '3-class: 안전(0건) / 주의(1~6건) / 위험(7건+)<br>'
-        '<b>Pipeline(StandardScaler + LR)</b>'
-        '</span></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    _m_col1, _m_col2 = st.columns(2)
-    with _m_col1:
-        st.markdown(
-            '<div style="background:#FEF5E7;padding:12px 16px;border-radius:8px;'
-            'border-left:4px solid #F39C12;">'
-            '<b style="color:#2C3E50;">3-class 라벨링 기준</b><br>'
-            '<span style="font-size:13px;color:#2C3E50;">'
-            '사고 0건 → <b>안전</b> (82개소, 57.7%)<br>'
-            '사고 1~6건 → <b>주의</b> (25개소, 17.6%)<br>'
-            '사고 7건+ → <b>위험</b> (35개소, 24.6%)'
-            '</span></div>',
-            unsafe_allow_html=True,
-        )
-    with _m_col2:
-        st.markdown(
-            f'<div style="background:#FDEBD0;padding:12px 16px;border-radius:8px;'
-            f'border-left:4px solid #27AE60;">'
-            f'<b style="color:#2C3E50;">모델 성능</b><br>'
-            f'<span style="font-size:13px;color:#2C3E50;">'
-            f'1단계 구조 모델 AUC: <b>{struct_auc:.3f}</b><br>'
-            f'3단계 통합 모델 AUC: <b>{integ_auc:.3f}</b><br>'
-            f'5-Fold Cross Validation 기반'
-            f'</span></div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (d-1) 위험확률 기반 모델 설명 ──
-    st.markdown("##### 위험확률 기반 모델 (2단계 파이프라인)")
-    st.markdown(
-        '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
-        '<div style="flex:1;min-width:240px;background:linear-gradient(135deg,#F5EEF8,#E8DAEF);'
-        'padding:14px 16px;border-radius:10px;border-top:4px solid #6C3483;">'
-        '<b style="color:#6C3483;font-size:15px;">1단계: CV → 구조위험도</b><br>'
-        '<span style="font-size:12px;color:#2C3E50;">'
-        '입력: CV 5피처 (p_wide, p_barrier_yes,<br>'
-        'road_width_relative, sidewalk_ratio, parked_density)<br>'
-        '모델: Logistic Regression<br>'
-        '출력: <b>structure_risk</b> (구조위험 확률)<br>'
-        '<b>AUC = 0.71</b> (5-Fold CV)'
-        '</span></div>'
-        '<div style="display:flex;align-items:center;font-size:24px;color:#6C3483;">&#10132;</div>'
-        '<div style="flex:1;min-width:240px;background:linear-gradient(135deg,#E8DAEF,#D2B4DE);'
-        'padding:14px 16px;border-radius:10px;border-top:4px solid #8E44AD;">'
-        '<b style="color:#8E44AD;font-size:15px;">2단계: 통합 → 위험확률</b><br>'
-        '<span style="font-size:12px;color:#2C3E50;">'
-        '입력: structure_risk + 9개 시설물 + 어린이비율<br>'
-        '모델: Logistic Regression<br>'
-        '출력: <b>risk_prob</b> (위험확률)<br>'
-        '<b>AUC = 0.92</b> (5-Fold CV)'
-        '</span></div>'
-        '<div style="display:flex;align-items:center;font-size:24px;color:#6C3483;">&#10132;</div>'
-        '<div style="flex:1;min-width:180px;background:linear-gradient(135deg,#D2B4DE,#BB8FCE);'
-        'padding:14px 16px;border-radius:10px;border-top:4px solid #6C3483;">'
-        '<b style="color:#fff;font-size:15px;">안전점수</b><br>'
-        '<span style="font-size:12px;color:#fff;">'
-        '<code style="background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:4px;">'
-        'safety_score = 100 - risk_prob &times; 100'
-        '</code><br><br>'
-        '등급: 4분위 균등 분할<br>'
-        'A 29 / B 29 / C 29 / D 30개소'
-        '</span></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div style="background:#F5EEF8;padding:12px 16px;border-radius:8px;'
-        'border-left:4px solid #8E44AD;margin-bottom:16px;">'
-        '<span style="font-size:13px;color:#2C3E50;">'
-        '<b style="color:#6C3483;">적용 범위:</b> 성남시 142개소 중 117개소 (CV 이미지 보유). '
-        '25개소는 CV 이미지 미보유 → V6 점수 fallback.<br>'
-        '<b style="color:#6C3483;">기존 V6 모델과의 차이:</b> V6는 기본50 + 가산 - 감산 방식의 규칙 기반 점수. '
-        '위험확률 모델은 머신러닝 기반으로 도로 구조(CV)를 반영한 데이터 드리븐 점수.'
-        '</span></div>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (e) 광명 시뮬레이션 설명 ──
-    st.markdown("##### 광명시 시뮬레이션 방법")
-    st.markdown(
-        f'<div style="background:#FEF9E7;padding:16px 20px;border-radius:10px;'
-        f'border-left:4px solid #F39C12;margin-bottom:16px;">'
-        f'<span style="font-size:14px;color:#2C3E50;">'
-        f'<b style="color:#F39C12;">안전점수 예측 모델</b><br>'
-        f'성남시 데이터로 학습한 <b>LinearRegression</b> 모델 (R² = {model_r2:.3f})을 '
-        f'광명시 51개소에 적용<br>'
-        f'입력: 9개 시설물 수량 + 발생건수 + 어린이비율<br>'
-        f'출력: 예상 안전점수 → 사분위수 기반 등급 부여<br><br>'
-        f'<b style="color:#F39C12;">참고</b><br>'
-        f'광명시에 없는 시설 데이터(도로안전표지, 생활안전CCTV, 무인교통단속카메라)는 '
-        f'0으로 처리되어 실제보다 낮게 예측될 수 있습니다.'
-        f'</span></div>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-
-    # ── (f) 데이터 출처 ──
-    st.markdown("##### 데이터 출처")
-    st.markdown(
-        '<div style="background:#FEF5E7;padding:16px 20px;border-radius:10px;">'
-        '<table style="width:100%;font-size:13px;color:#2C3E50;border-collapse:collapse;">'
-        '<tr style="background:#F5CBA7;font-weight:600;color:#2C3E50;">'
-        '<td style="padding:8px 12px;">출처</td>'
-        '<td style="padding:8px 12px;">데이터 내용</td>'
-        '<td style="padding:8px 12px;">기간</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">공공데이터포털</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">스쿨존 목록, 9개 시설물 현황</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">도로교통공단</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">어린이보호구역 교통사고 통계</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2018~2023</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">경기데이터드림</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">행정동별 연령별 인구 (어린이비율)</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">광명시</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">광명시 어린이보호구역 시설물·사고 데이터</td>'
-        '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
-        '<tr><td style="padding:6px 12px;">카카오맵 로드뷰</td>'
-        '<td style="padding:6px 12px;">스쿨존 도로환경 이미지 (CV 분석용)</td>'
-        '<td style="padding:6px 12px;">2023~2024</td></tr>'
-        '</table></div>',
-        unsafe_allow_html=True,
-    )
-
-
-# ──────────────────────────────────────────────
 # 7. Footer
 # ──────────────────────────────────────────────
 st.markdown(
