@@ -905,17 +905,15 @@ if len(filtered_df) == 0:
 
 # Header
 _n_facilities = len(filtered_df)
-st.markdown(f"""
-<div style="margin-bottom:8px;">
-    <span style="font-size:36px;font-weight:700;color:#2C3E50;">
-        내 아이가 살기 좋은 동네
-    </span>
-    <span style="font-size:14px;color:#34495E;margin-left:12px;">
-        {selected_city} 어린이 보호구역 {_n_facilities}개소 안전 분석 대시보드
-        {"(모델 추정)" if selected_city == "광명시" else ""}
-    </span>
-</div>
-""", unsafe_allow_html=True)
+_model_note = " (모델 추정)" if selected_city == "광명시" else ""
+st.markdown(
+    f'<div style="margin-bottom:8px;">'
+    f'<span style="font-size:36px;font-weight:700;color:#2C3E50;">내 아이가 살기 좋은 동네</span>'
+    f'<span style="font-size:14px;color:#34495E;margin-left:12px;">'
+    f'{selected_city} 어린이 보호구역 {_n_facilities}개소 안전 분석 대시보드{_model_note}'
+    f'</span></div>',
+    unsafe_allow_html=True,
+)
 
 st.caption("점수는 확률 추정치이며, 보조 의사결정 도구로 사용하도록 권장합니다.")
 
