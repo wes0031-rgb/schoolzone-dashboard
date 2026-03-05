@@ -386,9 +386,9 @@ def make_popup(row, city="성남시"):
         <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;">안전점수</td><td style="text-align:right;font-weight:700;">{row['활성_안전점수']:.1f}점</td></tr>
       </table>"""
 
-    # CV 도로환경 섹션 (성남시만)
+    # CV 도로환경 섹션
     cv_section = ""
-    if city == "성남시" and not pd.isna(row.get('CV_도로폭확률')):
+    if not pd.isna(row.get('CV_도로폭확률')):
         cv_section = f"""
       <hr style="margin:6px 0;border:none;border-top:1px solid #FDEBD0;">
       <table style="font-size:10px;color:#444;width:100%;border-collapse:collapse;">
@@ -421,7 +421,7 @@ def make_popup(row, city="성남시"):
         <tr><td>적색표면 {int(row.get('도로적색표면', 0))}</td><td>신호등 {int(row.get('신호등', 0))}</td><td>횡단보도 {int(row.get('횡단보도', 0))}</td></tr>
         <tr><td>안전표지 {int(row.get('도로안전표지', 0))}</td><td>CCTV {int(row.get('생활안전CCTV', 0))}</td><td>카메라 {int(row.get('무인교통단속카메라', 0))}</td></tr>
         <tr><td>표지판 {int(row.get('보호구역표지판', 0))}</td><td>옐로카펫 {int(row.get('옐로카펫', 0))}</td><td>펜스 {int(row.get('무단횡단방지펜스', 0))}</td></tr>
-        <tr><td>발생건수 {acc_count}건 ({"안전" if acc_count == 0 else "주의" if acc_count <= 6 else "위험"})</td><td>어린이비율 {child_ratio:.1f}%</td><td>{f"구조위험 {row.get('structure_risk', 0):.0%}" if city == "성남시" else ""}</td></tr>
+        <tr><td>발생건수 {acc_count}건 ({"안전" if acc_count == 0 else "주의" if acc_count <= 6 else "위험"})</td><td>어린이비율 {child_ratio:.1f}%</td><td>{f"구조위험 {row.get('structure_risk', 0):.0%}" if pd.notna(row.get('structure_risk')) else ""}</td></tr>
       </table>
       {cv_section}
     </div>
@@ -749,10 +749,46 @@ for _, _gm_r in df_gm.iterrows():
     _gm_input["어린이비율"] = float(_gm_r["어린이비율"]) if pd.notna(_gm_r.get("어린이비율")) else _gm_child_median
     _gm_inputs.append(_gm_input)
 _gm_scores = np.clip(safety_model.predict(pd.DataFrame(_gm_inputs)), 0, 100).tolist()
-df_gm["활성_안전점수"] = _gm_scores
-df_gm["등급"] = df_gm["활성_안전점수"].apply(_classify_grade)
+df_gm["_LR_안전점수"] = _gm_scores
+df_gm["_LR_등급"] = pd.Series(_gm_scores).apply(_classify_grade).values
+
+# 광명시 개선 모델 결과 병합 (IM 우선, LR fallback)
+_gm_imp_path = DATA_DIR / "3_final_gm_improved.csv"
+if _gm_imp_path.exists():
+    _gm_imp = pd.read_csv(_gm_imp_path, encoding="utf-8-sig")
+    _gm_imp_merge = _gm_imp[["시설물명", "risk_prob_calibrated",
+                               "safety_score", "safety_grade"]].copy()
+    _gm_imp_merge.columns = ["시설물명", "IM_사고확률", "IM_안전점수", "IM_등급"]
+    _gm_imp_merge = _gm_imp_merge.drop_duplicates(subset=["시설물명"], keep="first")
+    df_gm = df_gm.merge(_gm_imp_merge, on="시설물명", how="left")
+    df_gm["활성_안전점수"] = df_gm["IM_안전점수"].fillna(df_gm["_LR_안전점수"])
+    df_gm["등급"] = df_gm["IM_등급"].fillna(df_gm["_LR_등급"])
+    df_gm["사고확률"] = df_gm["IM_사고확률"]
+else:
+    df_gm["활성_안전점수"] = df_gm["_LR_안전점수"]
+    df_gm["등급"] = df_gm["_LR_등급"]
+
 df_gm["안전등급"] = df_gm["등급"].map(GRADE_LABELS)
 df_gm["_시설합계"] = df_gm[FACILITY_COLS].sum(axis=1)
+
+# 광명시 CV 피처 + structure_risk 병합 (3_final_gm.csv)
+_gm_full_path = DATA_DIR / "3_final_gm.csv"
+if _gm_full_path.exists():
+    _gm_full = pd.read_csv(_gm_full_path, encoding="utf-8-sig")
+    _cv_rename = {
+        "p_wide": "CV_도로폭확률",
+        "p_barrier_yes": "CV_분리장치확률",
+        "road_width_relative": "CV_도로상대폭",
+        "sidewalk_ratio": "CV_보행공간비율",
+        "parked_density": "CV_주정차밀도",
+    }
+    _gm_cv_cols = ["시설물명", "structure_risk"] + list(_cv_rename.keys())
+    _gm_cv = _gm_full[[c for c in _gm_cv_cols if c in _gm_full.columns]].copy()
+    _gm_cv.rename(columns=_cv_rename, inplace=True)
+    _gm_cv = _gm_cv.drop_duplicates(subset=["시설물명"], keep="first")
+    df_gm = df_gm.merge(_gm_cv, on="시설물명", how="left")
+    if "structure_risk" in df_gm.columns:
+        df_gm["structure_risk"] = df_gm["structure_risk"].fillna(df_gm["structure_risk"].median())
 
 # ── 활성 데이터 선택 ──
 if selected_city == "성남시":
@@ -1840,7 +1876,7 @@ with tab_method:
         "스쿨존 안전등급 분석에 사용된 데이터, 변수, 모델, 도로환경(CV) 분석 결과를 설명합니다."
     )
     if selected_city == "광명시":
-        st.info("모델 분석 및 도로환경(CV) 분석은 성남시 데이터 기반입니다.")
+        st.info("모델 학습은 성남시 데이터 기반이며, 광명시에는 학습된 모델을 적용합니다.")
 
     # ── (a) 프로젝트 개요 ──
     st.markdown("##### 프로젝트 개요")
@@ -2187,7 +2223,7 @@ with tab_method:
     st.markdown("##### 등급별 도로환경 특성 (CV)")
     cv_cols = ["CV_도로폭확률", "CV_분리장치확률", "CV_도로상대폭", "CV_보행공간비율", "CV_주정차밀도"]
     cv_labels = ["넓은 도로 확률", "분리장치 확률", "도로 상대폭", "보행공간 비율", "주정차 밀도"]
-    df_cv = df_sn.dropna(subset=["CV_도로폭확률"])
+    df_cv = df.dropna(subset=["CV_도로폭확률"])
 
     cv_col1, cv_col2 = st.columns(2)
 
@@ -2210,15 +2246,7 @@ with tab_method:
         st.plotly_chart(fig_cv_grade, use_container_width=True)
 
     with cv_col2:
-        if selected_city != "성남시":
-            st.markdown(
-                "<div style='background:#FEF9E7;padding:20px;border-radius:8px;"
-                "text-align:center;color:#E67E22;margin-top:40px;'>"
-                "개별 시설 CV 분석은 성남시에서만 지원됩니다."
-                "</div>",
-                unsafe_allow_html=True,
-            )
-        elif selected_school != "(전체)" and selected_school in df_cv["시설물명"].values:
+        if selected_school != "(전체)" and selected_school in df_cv["시설물명"].values:
             cv_row = df_cv[df_cv["시설물명"] == selected_school].iloc[0]
             cv_avg = df_cv[cv_cols].mean()
 
@@ -2353,13 +2381,11 @@ with tab_method:
                 unsafe_allow_html=True,
             )
 
-    # ── A등급 vs D등급 로드뷰 비교 (성남시 전용) ──
+    # ── A등급 vs D등급 도로환경 비교 ──
     st.markdown("---")
-    if selected_city != "성남시":
-        st.info("A등급 vs D등급 로드뷰 비교는 성남시에서만 지원됩니다.")
     _a_schools = df_cv[df_cv["등급"] == "A"].copy()
     _d_schools = df_cv[df_cv["등급"] == "D"].copy()
-    if selected_city == "성남시" and len(_a_schools) > 0 and len(_d_schools) > 0:
+    if len(_a_schools) > 0 and len(_d_schools) > 0:
         st.markdown("##### A등급 vs D등급 도로환경 비교")
         st.caption("안전등급 최상위(A)와 최하위(D) 학교의 로드뷰 · CV 지표를 직접 비교합니다.")
         _a_rep = _a_schools.sort_values("활성_안전점수", ascending=False).iloc[0]
