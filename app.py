@@ -368,15 +368,22 @@ def make_popup(row, city="성남시"):
         <tr><td style="padding:2px 4px;">추정 방식</td><td style="text-align:right;font-size:10px;">성남시 모델 적용</td></tr>
         <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;">예상 안전점수</td><td style="text-align:right;font-weight:700;">{row['활성_안전점수']:.1f}점</td></tr>
       </table>"""
+    elif pd.notna(row.get('IM_안전점수')):
+        score_section = f"""
+      <table style="font-size:11px;color:#2C3E50;width:100%;border-collapse:collapse;">
+        <tr style="background:#FEF5E7;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#2C3E50;">안전점수 (개선 모델)</td></tr>
+        <tr><td style="padding:2px 4px;">사고확률(보정)</td><td style="text-align:right;font-weight:600;">{row.get('사고확률', 0):.1%}</td></tr>
+        <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;">안전점수</td><td style="text-align:right;font-weight:700;">{row['활성_안전점수']:.1f}점</td></tr>
+      </table>"""
     else:
         score_section = f"""
       <table style="font-size:11px;color:#2C3E50;width:100%;border-collapse:collapse;">
-        <tr style="background:#FEF5E7;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#2C3E50;">점수 구조</td></tr>
+        <tr style="background:#FEF5E7;"><td colspan="2" style="padding:3px 4px;font-weight:600;color:#2C3E50;">점수 구조 (V6)</td></tr>
         <tr><td style="padding:2px 4px;">가산점(시설)</td><td style="text-align:right;font-weight:600;">{row['가산점_시설_V6']:.1f}점</td></tr>
         <tr><td style="padding:2px 4px;">가산점(보너스)</td><td style="text-align:right;font-weight:600;">{int(row['가산점_보너스_V6'])}점</td></tr>
         <tr style="background:#FDEDEC;"><td style="padding:2px 4px;">감산점 합계</td><td style="text-align:right;font-weight:600;color:#E74C3C;">-{row['감산점_합계_V6']:.1f}점</td></tr>
         <tr><td style="padding:2px 4px;">기본점(50)</td><td style="text-align:right;">50.0점</td></tr>
-        <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;">최종 안전점수</td><td style="text-align:right;font-weight:700;">{row['활성_안전점수']:.1f}점</td></tr>
+        <tr style="background:#FEF9E7;"><td style="padding:2px 4px;font-weight:700;">안전점수</td><td style="text-align:right;font-weight:700;">{row['활성_안전점수']:.1f}점</td></tr>
       </table>"""
 
     # CV 도로환경 섹션 (성남시만)
@@ -709,14 +716,15 @@ if len(_prob_valid) > 0:
 df_sn["사고확률"] = df_sn["IM_사고확률"].fillna(df_sn.get("_inline_사고확률", np.nan))
 
 df_sn["_시설합계"] = df_sn[FACILITY_COLS].sum(axis=1)
-df_sn["활성_안전점수"] = df_sn["최종안전점수_V6"]
-df_sn["등급"] = df_sn["등급_V6"]
-df_sn["안전등급"] = df_sn["등급_V6"].map(GRADE_LABELS)
+# 개선 모델 점수/등급 우선, 없으면 V6 fallback (117개소 → 142개소)
+df_sn["활성_안전점수"] = df_sn["IM_안전점수"].fillna(df_sn["최종안전점수_V6"])
+df_sn["등급"] = df_sn["IM_등급"].fillna(df_sn["등급_V6"])
+df_sn["안전등급"] = df_sn["등급"].map(GRADE_LABELS)
 
 # ── 광명시 안전점수 예측 ──
 gm_raw = load_gwangmyung()
 safety_model, model_features, model_r2 = train_safety_model()
-gs_q1, gs_q2, gs_q3 = df_sn["최종안전점수_V6"].quantile([0.25, 0.5, 0.75]).values
+gs_q1, gs_q2, gs_q3 = df_sn["활성_안전점수"].quantile([0.25, 0.5, 0.75]).values
 
 
 def _classify_grade(score):
