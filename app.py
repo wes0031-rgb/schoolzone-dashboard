@@ -1699,6 +1699,40 @@ with tab_sim:
         tiles="https://mt0.google.com/vt/lyrs=r&hl=ko&x={x}&y={y}&z={z}",
         attr="Google", name="기본 지도", max_zoom=22,
     ).add_to(gm_map)
+
+    # 행정동 경계선
+    _gm_geo_sim = load_gm_geojson()
+    _gm_pop_sim = load_gm_population().dropna(subset=["어린이_비율"])
+    if _gm_geo_sim and _gm_geo_sim.get("features"):
+        _gm_choro = _gm_pop_sim[["동명", "어린이_비율"]].copy()
+        _gm_choro["adm_nm"] = "경기도 광명시 " + _gm_choro["동명"]
+        folium.Choropleth(
+            geo_data=_gm_geo_sim,
+            data=_gm_choro,
+            columns=["adm_nm", "어린이_비율"],
+            key_on="feature.properties.adm_nm",
+            fill_color="PuBu",
+            fill_opacity=0.15,
+            line_opacity=0.4,
+            legend_name="어린이 비율 (%)",
+            name="행정동 경계",
+        ).add_to(gm_map)
+        folium.GeoJson(
+            _gm_geo_sim,
+            name="행정동 구분선",
+            style_function=lambda _: {
+                "fillOpacity": 0,
+                "color": "#2C3E50",
+                "weight": 2,
+                "dashArray": "5,3",
+            },
+            tooltip=folium.GeoJsonTooltip(
+                fields=["adm_nm"],
+                aliases=["행정동"],
+                style="font-size:12px;font-weight:600;",
+            ),
+        ).add_to(gm_map)
+
     for _, gm_r in gm_result.iterrows():
         gm_color = GRADE_COLORS.get(gm_r["예상등급"], "#999")
         folium.CircleMarker(
