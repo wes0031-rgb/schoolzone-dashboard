@@ -1381,7 +1381,7 @@ with tab_facility:
     )
     fig_cmp.update_layout(**PLOTLY_LAYOUT, height=400)
     st.plotly_chart(fig_cmp, use_container_width=True)
-    st.caption("※ 광명시 도로안전표지·생활안전CCTV·무인교통단속카메라·보호구역표지판은 데이터 미수집으로 0 표시")
+    st.caption("※ 광명시 도로안전표지는 데이터 미수집으로 0 표시")
 
     # 인사이트 카드: A등급 vs D등급 시설 격차
     _a_fac_avg = df[df["등급"] == "A"][FACILITY_COLS].mean()
@@ -1612,7 +1612,7 @@ with tab_cv:
         # ── (a-2) 5종 분류 모델 비교 테이블 ──
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
         st.markdown("##### 분류 모델 비교 (5종)")
-        st.caption("115개소 데이터 기반 이진 분류 모델 비교 (사고 발생 여부)")
+        st.caption("117개소 데이터 기반 이진 분류 모델 비교 (사고 발생 여부)")
         _model_comp = pd.DataFrame({
             "모델": ["KNN (K=5)", "XGBoost", "Random Forest", "SVM (RBF)", "Logistic Regression"],
             "Val AUC": [0.857, 0.814, 0.800, 0.771, 0.757],
@@ -2061,7 +2061,7 @@ with tab_sim:
     st.markdown("### 광명시 스쿨존 시뮬레이션")
     st.caption(
         "성남시 모델을 광명시 51개소에 적용하여 예상 안전점수·등급을 산출합니다. "
-        "광명시에 없는 시설(도로안전표지, CCTV, 단속카메라)은 0으로 처리됩니다."
+        "광명시에 없는 도로안전표지는 0으로 처리됩니다."
     )
 
     # 이미 전역에서 계산된 df_gm 사용
@@ -2404,7 +2404,7 @@ with tab_method:
         f'입력: 9개 시설물 수량 + 발생건수 + 어린이비율<br>'
         f'출력: 예상 안전점수 → 사분위수 기반 등급 부여<br><br>'
         f'<b style="color:#F39C12;">참고</b><br>'
-        f'광명시에 없는 시설 데이터(도로안전표지, 생활안전CCTV, 무인교통단속카메라)는 '
+        f'광명시에 없는 도로안전표지는 '
         f'0으로 처리되어 실제보다 낮게 예측될 수 있습니다.'
         f'</span></div>',
         unsafe_allow_html=True,
