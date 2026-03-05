@@ -1207,64 +1207,64 @@ with _sub_indiv:
             st.caption("선택한 시설에 시설물 1개를 추가할 때 사고 발생 확률 변화량을 예측합니다.")
 
             _integ_model_pol, integ_feats_pol = _integ_model, integ_feats
-        _sim_input = {}
-        for _f in integ_feats_pol:
-            if _f == "어린이 비율(%)":
-                _sim_input[_f] = school_row.get("어린이비율", 10.0)
-            else:
-                _sim_input[_f] = school_row.get(_f, 0)
-        pol_base = pd.DataFrame([_sim_input])[integ_feats_pol].fillna(0).values
-        pol_base_prob = float(_integ_model_pol.predict_proba(pol_base)[0, 1])
+            _sim_input = {}
+            for _f in integ_feats_pol:
+                if _f == "어린이 비율(%)":
+                    _sim_input[_f] = school_row.get("어린이비율", 10.0)
+                else:
+                    _sim_input[_f] = school_row.get(_f, 0)
+            pol_base = pd.DataFrame([_sim_input])[integ_feats_pol].fillna(0).values
+            pol_base_prob = float(_integ_model_pol.predict_proba(pol_base)[0, 1])
 
-        pol_results = []
-        for i, feat in enumerate(integ_feats_pol):
-            if feat in FACILITY_COLS:
-                pol_modified = pol_base.copy()
-                pol_modified[0, i] += 1
-                pol_new_prob = float(_integ_model_pol.predict_proba(pol_modified)[0, 1])
-                pol_delta = pol_new_prob - pol_base_prob
-                pol_results.append({
-                    "시설물": feat,
-                    "현재 수량": int(school_row[feat]),
-                    "현재 사고확률": pol_base_prob,
-                    "추가 후 사고확률": pol_new_prob,
-                    "변화량 (%p)": pol_delta,
-                })
+            pol_results = []
+            for i, feat in enumerate(integ_feats_pol):
+                if feat in FACILITY_COLS:
+                    pol_modified = pol_base.copy()
+                    pol_modified[0, i] += 1
+                    pol_new_prob = float(_integ_model_pol.predict_proba(pol_modified)[0, 1])
+                    pol_delta = pol_new_prob - pol_base_prob
+                    pol_results.append({
+                        "시설물": feat,
+                        "현재 수량": int(school_row[feat]),
+                        "현재 사고확률": pol_base_prob,
+                        "추가 후 사고확률": pol_new_prob,
+                        "변화량 (%p)": pol_delta,
+                    })
 
-        pol_df = pd.DataFrame(pol_results).sort_values("변화량 (%p)")
+            pol_df = pd.DataFrame(pol_results).sort_values("변화량 (%p)")
 
-        top3 = pol_df.head(3)
-        st.markdown(
-            f'<div style="background:linear-gradient(135deg,#FDEBD0,#FEF9E7);'
-            f'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
-            f'<b style="color:#2C3E50;">{selected_school}</b> — '
-            f'현재 사고확률: <b>{pol_base_prob:.1%}</b><br>'
-            f'<span style="font-size:13px;color:#2C3E50;">'
-            f'사고확률 감소 TOP 3: '
-            + " / ".join(
-                f'<b>{r["시설물"]}</b> +1 → {r["변화량 (%p)"]:+.1%}p'
-                for _, r in top3.iterrows()
+            top3 = pol_df.head(3)
+            st.markdown(
+                f'<div style="background:linear-gradient(135deg,#FDEBD0,#FEF9E7);'
+                f'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
+                f'<b style="color:#2C3E50;">{selected_school}</b> — '
+                f'현재 사고확률: <b>{pol_base_prob:.1%}</b><br>'
+                f'<span style="font-size:13px;color:#2C3E50;">'
+                f'사고확률 감소 TOP 3: '
+                + " / ".join(
+                    f'<b>{r["시설물"]}</b> +1 → {r["변화량 (%p)"]:+.1%}p'
+                    for _, r in top3.iterrows()
+                )
+                + '</span></div>',
+                unsafe_allow_html=True,
             )
-            + '</span></div>',
-            unsafe_allow_html=True,
-        )
 
-        fig_pol = go.Figure()
-        fig_pol.add_trace(go.Bar(
-            y=pol_df["시설물"], x=pol_df["변화량 (%p)"] * 100,
-            orientation="h",
-            marker_color=["#27AE60" if v < 0 else "#E74C3C" for v in pol_df["변화량 (%p)"]],
-            text=[f"{v*100:+.2f}%p" for v in pol_df["변화량 (%p)"]],
-            textposition="outside",
-        ))
-        fig_pol.add_vline(x=0, line_color="#555", line_width=1)
-        fig_pol.update_layout(
-            **PLOTLY_LAYOUT, height=350,
-            title=f"{selected_school}: 시설물 +1개 추가 시 사고확률 변화",
-            xaxis=dict(title="사고확률 변화 (%p)"),
-            yaxis=dict(title=""),
-        )
-        st.plotly_chart(fig_pol, use_container_width=True)
+            fig_pol = go.Figure()
+            fig_pol.add_trace(go.Bar(
+                y=pol_df["시설물"], x=pol_df["변화량 (%p)"] * 100,
+                orientation="h",
+                marker_color=["#27AE60" if v < 0 else "#E74C3C" for v in pol_df["변화량 (%p)"]],
+                text=[f"{v*100:+.2f}%p" for v in pol_df["변화량 (%p)"]],
+                textposition="outside",
+            ))
+            fig_pol.add_vline(x=0, line_color="#555", line_width=1)
+            fig_pol.update_layout(
+                **PLOTLY_LAYOUT, height=350,
+                title=f"{selected_school}: 시설물 +1개 추가 시 사고확률 변화",
+                xaxis=dict(title="사고확률 변화 (%p)"),
+                yaxis=dict(title=""),
+            )
+            st.plotly_chart(fig_pol, use_container_width=True)
     else:
         st.markdown(
             "<div style='background:#FEF5E7;padding:30px;border-radius:10px;"
