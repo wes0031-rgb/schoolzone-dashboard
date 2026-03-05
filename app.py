@@ -926,8 +926,8 @@ if len(filtered_df) > 0:
     )
 
 # Tabs
-tab_map, tab_analysis, tab_facility, tab_sim, tab_method = st.tabs(
-    ["지도", "상세분석", "시설점수", "광명 시뮬레이션", "모델 분석"]
+tab_map, tab_facility, tab_sim, tab_method = st.tabs(
+    ["지도", "시설점수", "광명 시뮬레이션", "모델 분석"]
 )
 
 # ============================
@@ -1011,279 +1011,280 @@ with tab_map:
         st.caption("시설물 레이어(지킴이집, 사고다발지 등)는 성남시에서만 지원됩니다.")
     st_folium(m, height=550, use_container_width=True, returned_objects=[])
 
-# ============================
-# Tab 2: 상세분석
-# ============================
-with tab_analysis:
-    _sub_all, _sub_indiv = st.tabs(["전체 시설", "개별 시설"])
+    st.markdown("---")
 
-with _sub_all:
-    # ── 점수 구조 시각화 ──
-    if selected_city == "성남시" and "가산점_시설_V6" in filtered_df.columns:
-        st.markdown("##### 점수 구조: 기본(50) + 가산점(시설+보너스) - 감산점")
-        score_struct = pd.DataFrame({
-            "항목": ["가산점(시설)", "가산점(보너스)", "감산점 합계"],
-            "평균": [
-                filtered_df["가산점_시설_V6"].mean(),
-                filtered_df["가산점_보너스_V6"].mean(),
-                -filtered_df["감산점_합계_V6"].mean(),
-            ],
-        })
-        fig_struct = px.bar(
-            score_struct, x="항목", y="평균",
-            title="안전점수 구성 요소 평균",
-            color="항목",
-            color_discrete_map={
-                "가산점(시설)": "#F39C12",
-                "가산점(보너스)": "#F39C12",
-                "감산점 합계": "#E74C3C",
-            },
-            text="평균",
-        )
-        fig_struct.update_traces(texttemplate="%{text:.1f}", textposition="outside")
-        fig_struct.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
-        st.plotly_chart(fig_struct, use_container_width=True)
-    elif selected_city == "광명시":
-        st.markdown("##### 안전점수 개요")
-        st.caption("광명시 안전점수는 성남시 LinearRegression 모델로 추정한 값입니다.")
+    # ══════════════════════════════════════
+    # 상세분석 (구 상세분석 탭 통합)
+    # ══════════════════════════════════════
+    _sub_all, _sub_indiv = st.tabs(["전체 분석", "개별 시설"])
 
-    fig_hist = px.histogram(
-        filtered_df, x="활성_안전점수", nbins=20,
-        title="안전점수 분포",
-        labels={"활성_안전점수": "안전점수"},
-        color_discrete_sequence=["#F39C12"],
-    )
-    fig_hist.update_layout(**PLOTLY_LAYOUT, height=380, yaxis_title="시설 수", bargap=0.08)
-    st.plotly_chart(fig_hist, use_container_width=True)
-
-    # ── 등급별 현황 ──
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 등급별 현황")
-    grade_stats = filtered_df.groupby("등급").agg(
-        시설수=("시설물명", "count"),
-        평균_발생건수=("발생건수", "mean"),
-        평균_안전점수=("활성_안전점수", "mean"),
-    ).reindex(["A", "B", "C", "D"]).reset_index()
-    grade_stats["평균_발생건수"] = grade_stats["평균_발생건수"].round(1)
-    grade_stats["평균_안전점수"] = grade_stats["평균_안전점수"].round(1)
-    grade_stats.columns = ["등급", "시설 수", "평균 발생건수", "평균 안전점수"]
-
-    col_table, col_bar = st.columns(2)
-    with col_table:
-        st.dataframe(grade_stats, use_container_width=True, hide_index=True)
-
-    with col_bar:
-        fig_acc = px.bar(
-            grade_stats, x="등급", y="평균 발생건수",
-            title="등급별 평균 사고 발생건수",
-            color="등급",
-            color_discrete_map={g: GRADE_COLORS[g] for g in ["A", "B", "C", "D"]},
-            text="평균 발생건수",
-        )
-        fig_acc.update_traces(texttemplate="%{text}", textposition="outside")
-        fig_acc.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
-        st.plotly_chart(fig_acc, use_container_width=True)
-
-    # ── 시설유형별 현황 ──
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 시설유형별 안전점수")
-    type_stats = filtered_df.groupby("시설유형").agg(
-        시설수=("시설물명", "count"),
-        평균점수=("활성_안전점수", "mean"),
-        평균_발생건수=("발생건수", "mean"),
-    ).reset_index()
-    type_stats["평균점수"] = type_stats["평균점수"].round(1)
-    type_stats["평균_발생건수"] = type_stats["평균_발생건수"].round(1)
-
-    fig_type = px.bar(
-        type_stats.sort_values("평균점수"), x="평균점수", y="시설유형",
-        orientation="h",
-        title="시설유형별 평균 안전점수",
-        labels={"평균점수": "평균 안전점수", "시설유형": ""},
-        color="평균점수",
-        color_continuous_scale=[[0, "#E74C3C"], [0.5, "#85C1E9"], [1, "#154360"]],
-        text="시설수",
-    )
-    fig_type.update_traces(texttemplate="%{text}개소", textposition="outside")
-    fig_type.update_layout(**PLOTLY_LAYOUT, height=280, coloraxis_showscale=False)
-    st.plotly_chart(fig_type, use_container_width=True)
-
-    # ── D등급 개선 제안 ──
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown("##### 주의 필요 시설 (D등급)")
-    low_facilities = filtered_df[filtered_df["등급"] == "D"].sort_values("활성_안전점수")
-    if len(low_facilities) > 0:
-        for _, row in low_facilities.iterrows():
-            grade_color = GRADE_COLORS["D"]
-            # 가장 부족한 시설 찾기
-            worst = None
-            worst_pct = 1.0
-            for f in FACILITY_COLS:
-                mx = df[f].max()
-                if mx > 0:
-                    pct = row[f] / mx
-                    if pct < worst_pct:
-                        worst_pct = pct
-                        worst = f
-            suggestion = f"{worst} 보강 필요 (현재 {int(row[worst])}개)" if worst else "추가 분석 필요"
-            st.markdown(
-                f'<div class="suggestion-card">'
-                f'<span class="school-name">{row["시설물명"]}</span> '
-                f'<span style="font-size:11px;color:#34495E;">({row["시설유형"]})</span> &nbsp; '
-                f'<span style="background:{grade_color};color:#fff;padding:2px 10px;'
-                f'border-radius:20px;font-size:11px;">D ({row["활성_안전점수"]:.1f}점)</span>'
-                f'<div class="suggestion">개선 제안: {suggestion}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
+    with _sub_all:
+        # ── 점수 구조 시각화 ──
+        if selected_city == "성남시" and "가산점_시설_V6" in filtered_df.columns:
+            st.markdown("##### 점수 구조: 기본(50) + 가산점(시설+보너스) - 감산점")
+            score_struct = pd.DataFrame({
+                "항목": ["가산점(시설)", "가산점(보너스)", "감산점 합계"],
+                "평균": [
+                    filtered_df["가산점_시설_V6"].mean(),
+                    filtered_df["가산점_보너스_V6"].mean(),
+                    -filtered_df["감산점_합계_V6"].mean(),
+                ],
+            })
+            fig_struct = px.bar(
+                score_struct, x="항목", y="평균",
+                title="안전점수 구성 요소 평균",
+                color="항목",
+                color_discrete_map={
+                    "가산점(시설)": "#F39C12",
+                    "가산점(보너스)": "#F39C12",
+                    "감산점 합계": "#E74C3C",
+                },
+                text="평균",
             )
-    else:
-        st.success("모든 시설이 양호한 상태입니다.")
-
-
-with _sub_indiv:
-    if selected_school != "(전체)":
-        school_row = df[df["시설물명"] == selected_school].iloc[0]
-
-        # ── 상세 카드 ──
-        _gc = GRADE_COLORS.get(school_row["등급"], "#999")
-        _gl = GRADE_LABELS.get(school_row["등급"], school_row["등급"])
-        st.markdown(
-            f"<div style='background:#FEF5E7;padding:12px 16px;border-radius:8px;"
-            f"border-left:4px solid {_gc};'>"
-            f"<b style='color:#2C3E50;'>{selected_school}</b> &nbsp; "
-            f"<span style='background:{_gc};color:#fff;padding:2px 10px;"
-            f"border-radius:20px;font-size:12px;'>{_gl}</span> &nbsp; "
-            f"<span style='color:#2C3E50;'>안전점수: <b>{school_row['활성_안전점수']:.1f}</b></span> &nbsp; "
-            f"<span style='color:#2C3E50;'>발생건수: <b>{int(school_row['발생건수']) if pd.notna(school_row['발생건수']) else 0}</b>건</span>"
-            f"</div>",
-            unsafe_allow_html=True,
+            fig_struct.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+            fig_struct.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
+            st.plotly_chart(fig_struct, use_container_width=True)
+        elif selected_city == "광명시":
+            st.markdown("##### 안전점수 개요")
+            st.caption("광명시 안전점수는 성남시 LinearRegression 모델로 추정한 값입니다.")
+    
+        fig_hist = px.histogram(
+            filtered_df, x="활성_안전점수", nbins=20,
+            title="안전점수 분포",
+            labels={"활성_안전점수": "안전점수"},
+            color_discrete_sequence=["#F39C12"],
         )
-
-        st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
-
-        # ── 로드뷰 이미지 ──
-        _rv_name = selected_school.replace(" ", "_")
-        _rv_path = DATA_DIR / "roadview" / f"{_rv_name}_북쪽.jpg"
-        if _rv_path.exists():
-            st.markdown("##### 로드뷰 (북쪽 방향)")
-            st.image(str(_rv_path), use_container_width=True)
-        else:
-            # 공백 없는 원본 이름으로도 시도
-            _rv_path2 = DATA_DIR / "roadview" / f"{selected_school}_북쪽.jpg"
-            if _rv_path2.exists():
-                st.markdown("##### 로드뷰 (북쪽 방향)")
-                st.image(str(_rv_path2), use_container_width=True)
-
-        st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
-
-        # ── 레이더 차트 ──
-        radar_feats = FACILITY_COLS
-        radar_labels = radar_feats.copy()
-        vals = []
-        for f in radar_feats:
-            mx = df[f].max()
-            vals.append(school_row[f] / mx * 100 if mx > 0 else 0)
-        vals.append(vals[0])
-        radar_labels_closed = radar_labels + [radar_labels[0]]
-
-        fig_radar = go.Figure()
-        fig_radar.add_trace(go.Scatterpolar(
-            r=vals, theta=radar_labels_closed,
-            fill="toself", name=selected_school,
-            fillcolor="rgba(46,134,193,0.2)",
-            line=dict(color="#2C3E50", width=2),
-        ))
-        fig_radar.update_layout(
-            **PLOTLY_LAYOUT,
-            polar=dict(
-                radialaxis=dict(visible=True, range=[0, 100], gridcolor="#F5CBA7"),
-                angularaxis=dict(gridcolor="#F5CBA7"),
-                bgcolor="#FAFCFF",
-            ),
-            title=f"{selected_school} 시설물 현황",
-            height=420, showlegend=False,
+        fig_hist.update_layout(**PLOTLY_LAYOUT, height=380, yaxis_title="시설 수", bargap=0.08)
+        st.plotly_chart(fig_hist, use_container_width=True)
+    
+        # ── 등급별 현황 ──
+        st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+        st.markdown("##### 등급별 현황")
+        grade_stats = filtered_df.groupby("등급").agg(
+            시설수=("시설물명", "count"),
+            평균_발생건수=("발생건수", "mean"),
+            평균_안전점수=("활성_안전점수", "mean"),
+        ).reindex(["A", "B", "C", "D"]).reset_index()
+        grade_stats["평균_발생건수"] = grade_stats["평균_발생건수"].round(1)
+        grade_stats["평균_안전점수"] = grade_stats["평균_안전점수"].round(1)
+        grade_stats.columns = ["등급", "시설 수", "평균 발생건수", "평균 안전점수"]
+    
+        col_table, col_bar = st.columns(2)
+        with col_table:
+            st.dataframe(grade_stats, use_container_width=True, hide_index=True)
+    
+        with col_bar:
+            fig_acc = px.bar(
+                grade_stats, x="등급", y="평균 발생건수",
+                title="등급별 평균 사고 발생건수",
+                color="등급",
+                color_discrete_map={g: GRADE_COLORS[g] for g in ["A", "B", "C", "D"]},
+                text="평균 발생건수",
+            )
+            fig_acc.update_traces(texttemplate="%{text}", textposition="outside")
+            fig_acc.update_layout(**PLOTLY_LAYOUT, height=350, showlegend=False)
+            st.plotly_chart(fig_acc, use_container_width=True)
+    
+        # ── 시설유형별 현황 ──
+        st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+        st.markdown("##### 시설유형별 안전점수")
+        type_stats = filtered_df.groupby("시설유형").agg(
+            시설수=("시설물명", "count"),
+            평균점수=("활성_안전점수", "mean"),
+            평균_발생건수=("발생건수", "mean"),
+        ).reset_index()
+        type_stats["평균점수"] = type_stats["평균점수"].round(1)
+        type_stats["평균_발생건수"] = type_stats["평균_발생건수"].round(1)
+    
+        fig_type = px.bar(
+            type_stats.sort_values("평균점수"), x="평균점수", y="시설유형",
+            orientation="h",
+            title="시설유형별 평균 안전점수",
+            labels={"평균점수": "평균 안전점수", "시설유형": ""},
+            color="평균점수",
+            color_continuous_scale=[[0, "#E74C3C"], [0.5, "#85C1E9"], [1, "#154360"]],
+            text="시설수",
         )
-        st.plotly_chart(fig_radar, use_container_width=True)
-
-        # ── 정책 시뮬레이션 (성남시 전용) ──
-        if selected_city != "성남시":
-            st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-            st.info("정책 시뮬레이션은 성남시에서만 지원됩니다.")
-        else:
-            st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-            st.markdown("##### 정책 시뮬레이션: 시설물 추가 효과")
-            st.caption("선택한 시설에 시설물 1개를 추가할 때 사고 발생 확률 변화량을 예측합니다.")
-
-            _integ_model_pol, integ_feats_pol = _integ_model, integ_feats
-            _sim_input = {}
-            for _f in integ_feats_pol:
-                if _f == "어린이 비율(%)":
-                    _sim_input[_f] = school_row.get("어린이비율", 10.0)
-                else:
-                    _sim_input[_f] = school_row.get(_f, 0)
-            pol_base = pd.DataFrame([_sim_input])[integ_feats_pol].fillna(0).values
-            pol_base_prob = float(_integ_model_pol.predict_proba(pol_base)[0, 1])
-
-            pol_results = []
-            for i, feat in enumerate(integ_feats_pol):
-                if feat in FACILITY_COLS:
-                    pol_modified = pol_base.copy()
-                    pol_modified[0, i] += 1
-                    pol_new_prob = float(_integ_model_pol.predict_proba(pol_modified)[0, 1])
-                    pol_delta = pol_new_prob - pol_base_prob
-                    pol_results.append({
-                        "시설물": feat,
-                        "현재 수량": int(school_row[feat]),
-                        "현재 사고확률": pol_base_prob,
-                        "추가 후 사고확률": pol_new_prob,
-                        "변화량 (%p)": pol_delta,
-                    })
-
-            pol_df = pd.DataFrame(pol_results).sort_values("변화량 (%p)")
-
-            top3 = pol_df.head(3)
-            st.markdown(
-                f'<div style="background:linear-gradient(135deg,#FDEBD0,#FEF9E7);'
-                f'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
-                f'<b style="color:#2C3E50;">{selected_school}</b> — '
-                f'현재 사고확률: <b>{pol_base_prob:.1%}</b><br>'
-                f'<span style="font-size:13px;color:#2C3E50;">'
-                f'사고확률 감소 TOP 3: '
-                + " / ".join(
-                    f'<b>{r["시설물"]}</b> +1 → {r["변화량 (%p)"]:+.1%}p'
-                    for _, r in top3.iterrows()
+        fig_type.update_traces(texttemplate="%{text}개소", textposition="outside")
+        fig_type.update_layout(**PLOTLY_LAYOUT, height=280, coloraxis_showscale=False)
+        st.plotly_chart(fig_type, use_container_width=True)
+    
+        # ── D등급 개선 제안 ──
+        st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+        st.markdown("##### 주의 필요 시설 (D등급)")
+        low_facilities = filtered_df[filtered_df["등급"] == "D"].sort_values("활성_안전점수")
+        if len(low_facilities) > 0:
+            for _, row in low_facilities.iterrows():
+                grade_color = GRADE_COLORS["D"]
+                # 가장 부족한 시설 찾기
+                worst = None
+                worst_pct = 1.0
+                for f in FACILITY_COLS:
+                    mx = df[f].max()
+                    if mx > 0:
+                        pct = row[f] / mx
+                        if pct < worst_pct:
+                            worst_pct = pct
+                            worst = f
+                suggestion = f"{worst} 보강 필요 (현재 {int(row[worst])}개)" if worst else "추가 분석 필요"
+                st.markdown(
+                    f'<div class="suggestion-card">'
+                    f'<span class="school-name">{row["시설물명"]}</span> '
+                    f'<span style="font-size:11px;color:#34495E;">({row["시설유형"]})</span> &nbsp; '
+                    f'<span style="background:{grade_color};color:#fff;padding:2px 10px;'
+                    f'border-radius:20px;font-size:11px;">D ({row["활성_안전점수"]:.1f}점)</span>'
+                    f'<div class="suggestion">개선 제안: {suggestion}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
-                + '</span></div>',
+        else:
+            st.success("모든 시설이 양호한 상태입니다.")
+    
+    
+    with _sub_indiv:
+        if selected_school != "(전체)":
+            school_row = df[df["시설물명"] == selected_school].iloc[0]
+    
+            # ── 상세 카드 ──
+            _gc = GRADE_COLORS.get(school_row["등급"], "#999")
+            _gl = GRADE_LABELS.get(school_row["등급"], school_row["등급"])
+            st.markdown(
+                f"<div style='background:#FEF5E7;padding:12px 16px;border-radius:8px;"
+                f"border-left:4px solid {_gc};'>"
+                f"<b style='color:#2C3E50;'>{selected_school}</b> &nbsp; "
+                f"<span style='background:{_gc};color:#fff;padding:2px 10px;"
+                f"border-radius:20px;font-size:12px;'>{_gl}</span> &nbsp; "
+                f"<span style='color:#2C3E50;'>안전점수: <b>{school_row['활성_안전점수']:.1f}</b></span> &nbsp; "
+                f"<span style='color:#2C3E50;'>발생건수: <b>{int(school_row['발생건수']) if pd.notna(school_row['발생건수']) else 0}</b>건</span>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
-
-            fig_pol = go.Figure()
-            fig_pol.add_trace(go.Bar(
-                y=pol_df["시설물"], x=pol_df["변화량 (%p)"] * 100,
-                orientation="h",
-                marker_color=["#27AE60" if v < 0 else "#E74C3C" for v in pol_df["변화량 (%p)"]],
-                text=[f"{v*100:+.2f}%p" for v in pol_df["변화량 (%p)"]],
-                textposition="outside",
+    
+            st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+    
+            # ── 로드뷰 이미지 ──
+            _rv_name = selected_school.replace(" ", "_")
+            _rv_path = DATA_DIR / "roadview" / f"{_rv_name}_북쪽.jpg"
+            if _rv_path.exists():
+                st.markdown("##### 로드뷰 (북쪽 방향)")
+                st.image(str(_rv_path), use_container_width=True)
+            else:
+                # 공백 없는 원본 이름으로도 시도
+                _rv_path2 = DATA_DIR / "roadview" / f"{selected_school}_북쪽.jpg"
+                if _rv_path2.exists():
+                    st.markdown("##### 로드뷰 (북쪽 방향)")
+                    st.image(str(_rv_path2), use_container_width=True)
+    
+            st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+    
+            # ── 레이더 차트 ──
+            radar_feats = FACILITY_COLS
+            radar_labels = radar_feats.copy()
+            vals = []
+            for f in radar_feats:
+                mx = df[f].max()
+                vals.append(school_row[f] / mx * 100 if mx > 0 else 0)
+            vals.append(vals[0])
+            radar_labels_closed = radar_labels + [radar_labels[0]]
+    
+            fig_radar = go.Figure()
+            fig_radar.add_trace(go.Scatterpolar(
+                r=vals, theta=radar_labels_closed,
+                fill="toself", name=selected_school,
+                fillcolor="rgba(46,134,193,0.2)",
+                line=dict(color="#2C3E50", width=2),
             ))
-            fig_pol.add_vline(x=0, line_color="#555", line_width=1)
-            fig_pol.update_layout(
-                **PLOTLY_LAYOUT, height=350,
-                title=f"{selected_school}: 시설물 +1개 추가 시 사고확률 변화",
-                xaxis=dict(title="사고확률 변화 (%p)"),
-                yaxis=dict(title=""),
+            fig_radar.update_layout(
+                **PLOTLY_LAYOUT,
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 100], gridcolor="#F5CBA7"),
+                    angularaxis=dict(gridcolor="#F5CBA7"),
+                    bgcolor="#FAFCFF",
+                ),
+                title=f"{selected_school} 시설물 현황",
+                height=420, showlegend=False,
             )
-            st.plotly_chart(fig_pol, use_container_width=True)
-    else:
-        st.markdown(
-            "<div style='background:#FEF5E7;padding:30px;border-radius:10px;"
-            "text-align:center;color:#E67E22;'>"
-            "<span style='font-size:16px;font-weight:600;'>사이드바에서 개별 시설을 선택해 주세요</span><br><br>"
-            "<span style='font-size:13px;color:#566573;'>"
-            "시설을 선택하면 시설물 레이더 차트, 상세 정보,<br>"
-            "시설물 추가 효과 시뮬레이션을 확인할 수 있습니다.</span>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+            st.plotly_chart(fig_radar, use_container_width=True)
+    
+            # ── 정책 시뮬레이션 (성남시 전용) ──
+            if selected_city != "성남시":
+                st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+                st.info("정책 시뮬레이션은 성남시에서만 지원됩니다.")
+            else:
+                st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+                st.markdown("##### 정책 시뮬레이션: 시설물 추가 효과")
+                st.caption("선택한 시설에 시설물 1개를 추가할 때 사고 발생 확률 변화량을 예측합니다.")
+    
+                _integ_model_pol, integ_feats_pol = _integ_model, integ_feats
+                _sim_input = {}
+                for _f in integ_feats_pol:
+                    if _f == "어린이 비율(%)":
+                        _sim_input[_f] = school_row.get("어린이비율", 10.0)
+                    else:
+                        _sim_input[_f] = school_row.get(_f, 0)
+                pol_base = pd.DataFrame([_sim_input])[integ_feats_pol].fillna(0).values
+                pol_base_prob = float(_integ_model_pol.predict_proba(pol_base)[0, 1])
+    
+                pol_results = []
+                for i, feat in enumerate(integ_feats_pol):
+                    if feat in FACILITY_COLS:
+                        pol_modified = pol_base.copy()
+                        pol_modified[0, i] += 1
+                        pol_new_prob = float(_integ_model_pol.predict_proba(pol_modified)[0, 1])
+                        pol_delta = pol_new_prob - pol_base_prob
+                        pol_results.append({
+                            "시설물": feat,
+                            "현재 수량": int(school_row[feat]),
+                            "현재 사고확률": pol_base_prob,
+                            "추가 후 사고확률": pol_new_prob,
+                            "변화량 (%p)": pol_delta,
+                        })
+    
+                pol_df = pd.DataFrame(pol_results).sort_values("변화량 (%p)")
+    
+                top3 = pol_df.head(3)
+                st.markdown(
+                    f'<div style="background:linear-gradient(135deg,#FDEBD0,#FEF9E7);'
+                    f'padding:14px 18px;border-radius:10px;border-left:4px solid #27AE60;">'
+                    f'<b style="color:#2C3E50;">{selected_school}</b> — '
+                    f'현재 사고확률: <b>{pol_base_prob:.1%}</b><br>'
+                    f'<span style="font-size:13px;color:#2C3E50;">'
+                    f'사고확률 감소 TOP 3: '
+                    + " / ".join(
+                        f'<b>{r["시설물"]}</b> +1 → {r["변화량 (%p)"]:+.1%}p'
+                        for _, r in top3.iterrows()
+                    )
+                    + '</span></div>',
+                    unsafe_allow_html=True,
+                )
+    
+                fig_pol = go.Figure()
+                fig_pol.add_trace(go.Bar(
+                    y=pol_df["시설물"], x=pol_df["변화량 (%p)"] * 100,
+                    orientation="h",
+                    marker_color=["#27AE60" if v < 0 else "#E74C3C" for v in pol_df["변화량 (%p)"]],
+                    text=[f"{v*100:+.2f}%p" for v in pol_df["변화량 (%p)"]],
+                    textposition="outside",
+                ))
+                fig_pol.add_vline(x=0, line_color="#555", line_width=1)
+                fig_pol.update_layout(
+                    **PLOTLY_LAYOUT, height=350,
+                    title=f"{selected_school}: 시설물 +1개 추가 시 사고확률 변화",
+                    xaxis=dict(title="사고확률 변화 (%p)"),
+                    yaxis=dict(title=""),
+                )
+                st.plotly_chart(fig_pol, use_container_width=True)
+        else:
+            st.markdown(
+                "<div style='background:#FEF5E7;padding:30px;border-radius:10px;"
+                "text-align:center;color:#E67E22;'>"
+                "<span style='font-size:16px;font-weight:600;'>사이드바에서 개별 시설을 선택해 주세요</span><br><br>"
+                "<span style='font-size:13px;color:#566573;'>"
+                "시설을 선택하면 시설물 레이더 차트, 상세 정보,<br>"
+                "시설물 추가 효과 시뮬레이션을 확인할 수 있습니다.</span>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
 
 # ============================
