@@ -1,6 +1,6 @@
 """
 스쿨존 안전 분석 대시보드 — 내 아이가 살기 좋은 동네
-성남시 어린이 보호구역 136개소 안전등급 시각화
+성남시 142개소 + 광명시 51개소 어린이 보호구역 안전등급 시각화
 
 실행: streamlit run app.py
 """
@@ -105,22 +105,18 @@ DATA_DIR = BASE_DIR / "data"
 GRADE_COLORS = {"A": "#27AE60", "B": "#F1C40F", "C": "#E67E22", "D": "#E74C3C"}
 GRADE_LABELS = {"A": "A (우수)", "B": "B (양호)", "C": "C (보통)", "D": "D (주의)"}
 
-MAP_CENTER = [37.42, 127.13]
-
 CITY_CONFIG = {
     "성남시": {
         "center": [37.42, 127.13],
         "zoom": 12,
         "geojson": "성남시_행정동_경계.geojson",
         "population": "연령별인구_성남시_행정동.csv",
-        "adm_prefix": "경기도 성남시",
     },
     "광명시": {
         "center": [37.445, 126.870],
         "zoom": 13,
         "geojson": "광명시_행정동_경계.geojson",
         "population": "광명시_인구_행정동.csv",
-        "adm_prefix": "경기도 광명시",
     },
 }
 
@@ -722,13 +718,14 @@ df_gm = gm_raw.copy()
 for _fc in FACILITY_COLS:
     if _fc in df_gm.columns:
         df_gm[_fc] = df_gm[_fc].fillna(0)
-_gm_scores = []
+_gm_child_median = df_gm["어린이비율"].median() if df_gm["어린이비율"].notna().any() else 10.0
+_gm_inputs = []
 for _, _gm_r in df_gm.iterrows():
     _gm_input = {f: (int(_gm_r[f]) if pd.notna(_gm_r.get(f)) else 0) for f in FACILITY_COLS}
     _gm_input["발생건수"] = int(_gm_r["발생건수"]) if pd.notna(_gm_r.get("발생건수")) else 0
-    _gm_input["어린이비율"] = float(_gm_r["어린이비율"]) if pd.notna(_gm_r.get("어린이비율")) else 10.0
-    _gm_pred = max(0.0, min(100.0, float(safety_model.predict(pd.DataFrame([_gm_input]))[0])))
-    _gm_scores.append(_gm_pred)
+    _gm_input["어린이비율"] = float(_gm_r["어린이비율"]) if pd.notna(_gm_r.get("어린이비율")) else _gm_child_median
+    _gm_inputs.append(_gm_input)
+_gm_scores = np.clip(safety_model.predict(pd.DataFrame(_gm_inputs)), 0, 100).tolist()
 df_gm["활성_안전점수"] = _gm_scores
 df_gm["등급"] = df_gm["활성_안전점수"].apply(_classify_grade)
 df_gm["안전등급"] = df_gm["등급"].map(GRADE_LABELS)
@@ -860,7 +857,7 @@ safe_ratio = (
     if len(filtered_df) else 0
 )
 k3.metric("안전(A+B) 비율", f"{safe_ratio:.0f}%")
-total_accidents = int(filtered_df["발생건수"].sum())
+total_accidents = int(filtered_df["발생건수"].fillna(0).sum())
 k4.metric("사고건수 합계", f"{total_accidents}건")
 
 # ── 핵심 인사이트 카드 ──
@@ -1136,7 +1133,7 @@ with _sub_indiv:
             f"<span style='background:{_gc};color:#fff;padding:2px 10px;"
             f"border-radius:20px;font-size:12px;'>{_gl}</span> &nbsp; "
             f"<span style='color:#2C3E50;'>안전점수: <b>{school_row['활성_안전점수']:.1f}</b></span> &nbsp; "
-            f"<span style='color:#2C3E50;'>발생건수: <b>{int(school_row['발생건수'])}</b>건</span>"
+            f"<span style='color:#2C3E50;'>발생건수: <b>{int(school_row['발생건수']) if pd.notna(school_row['발생건수']) else 0}</b>건</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -1267,7 +1264,7 @@ with _sub_indiv:
 # ============================
 with tab_facility:
     st.markdown("### 시설물 보유 현황 및 분석")
-    st.caption("136개소 스쿨존의 9개 안전 시설물 보유 현황과 사고 관계를 분석합니다.")
+    st.caption(f"{len(df)}개소 스쿨존의 9개 안전 시설물 보유 현황과 사고 관계를 분석합니다.")
 
     # ── (a) 시설 보유 현황 KPI ──
     _fac_totals = df[FACILITY_COLS].sum()
@@ -1538,20 +1535,18 @@ with tab_facility:
 _struct_model, struct_auc, _fac_risk_cv = train_structure_model()
 
 with tab_cv:
+    st.markdown("### 캡스톤 연구: 3단계 사고 예측 모델")
+    st.caption(
+        "핵심 메시지: 스쿨존 사고는 구조 + 정책(시설) + 노출(어린이)의 결합 결과이다. "
+        "도로 구조 단독으로는 설명력이 부족하며, 정책 시설 투입이 핵심이다."
+    )
     if selected_city == "광명시":
-        st.markdown("### 캡스톤 연구: 3단계 사고 예측 모델")
-        st.info("도로환경(CV) 분석은 성남시 데이터만 지원됩니다. 사이드바에서 성남시를 선택해 주세요.")
-    else:
-        st.markdown("### 캡스톤 연구: 3단계 사고 예측 모델")
-        st.caption(
-            "핵심 메시지: 스쿨존 사고는 구조 + 정책(시설) + 노출(어린이)의 결합 결과이다. "
-            "도로 구조 단독으로는 설명력이 부족하며, 정책 시설 투입이 핵심이다."
-        )
-        # _integ_model, integ_feats, integ_auc, integ_coef — 전역에서 이미 학습됨
+        st.info("아래 모델 분석은 성남시 데이터 기반입니다. 개별 시설 분석·로드뷰는 성남시 전용입니다.")
 
-        # 2단계 외부검증 AUC: 구조위험도만으로 사고 여부 예측
+    # 성남시 데이터로 외부검증 AUC 계산 (모델 분석은 항상 성남시 기준)
+    if True:
         from sklearn.metrics import roc_auc_score as _roc_auc
-        _ext_valid = df.dropna(subset=["structure_risk", "발생건수"])
+        _ext_valid = df_sn.dropna(subset=["structure_risk", "발생건수"])
         _ext_y = (_ext_valid["발생건수"] > 0).astype(int)
         extern_auc = float(_roc_auc(_ext_y, _ext_valid["structure_risk"])) if len(_ext_y.unique()) > 1 else 0.5
 
@@ -1649,7 +1644,7 @@ with tab_cv:
         # ── (c) 시설별 사고 확률 예측 (3단계) ──
         st.markdown("##### 시설별 사고 확률 예측 — 3단계 (통합 모델)")
 
-        df_for_prob = df.dropna(subset=["위험확률"]).copy()
+        df_for_prob = df_sn.dropna(subset=["위험확률"]).copy()
         if len(df_for_prob) > 0:
             prob_display = df_for_prob.nlargest(20, "위험확률")[
                 ["시설물명", "시설유형", "구", "등급",
@@ -1671,7 +1666,7 @@ with tab_cv:
         st.markdown("##### 등급별 도로환경 특성 (CV)")
         cv_cols = ["CV_도로폭확률", "CV_분리장치확률", "CV_도로상대폭", "CV_보행공간비율", "CV_주정차밀도"]
         cv_labels = ["넓은 도로 확률", "분리장치 확률", "도로 상대폭", "보행공간 비율", "주정차 밀도"]
-        df_cv = df.dropna(subset=["CV_도로폭확률"])
+        df_cv = df_sn.dropna(subset=["CV_도로폭확률"])
 
         cv_col1, cv_col2 = st.columns(2)
 
@@ -1694,7 +1689,15 @@ with tab_cv:
             st.plotly_chart(fig_cv_grade, use_container_width=True)
 
         with cv_col2:
-            if selected_school != "(전체)" and selected_school in df_cv["시설물명"].values:
+            if selected_city != "성남시":
+                st.markdown(
+                    "<div style='background:#FEF9E7;padding:20px;border-radius:8px;"
+                    "text-align:center;color:#E67E22;margin-top:40px;'>"
+                    "개별 시설 CV 분석은 성남시에서만 지원됩니다."
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+            elif selected_school != "(전체)" and selected_school in df_cv["시설물명"].values:
                 cv_row = df_cv[df_cv["시설물명"] == selected_school].iloc[0]
                 cv_avg = df_cv[cv_cols].mean()
 
@@ -1829,14 +1832,15 @@ with tab_cv:
                     unsafe_allow_html=True,
                 )
 
-        # ── (e) A등급 vs D등급 로드뷰 비교 (항상 표시) ──
+        # ── (e) A등급 vs D등급 로드뷰 비교 (성남시 전용) ──
         st.markdown("---")
-        st.markdown("##### A등급 vs D등급 도로환경 비교")
-        st.caption("안전등급 최상위(A)와 최하위(D) 학교의 로드뷰 · CV 지표를 직접 비교합니다.")
-
+        if selected_city != "성남시":
+            st.info("A등급 vs D등급 로드뷰 비교는 성남시에서만 지원됩니다.")
         _a_schools = df_cv[df_cv["등급"] == "A"].copy()
         _d_schools = df_cv[df_cv["등급"] == "D"].copy()
-        if len(_a_schools) > 0 and len(_d_schools) > 0:
+        if selected_city == "성남시" and len(_a_schools) > 0 and len(_d_schools) > 0:
+            st.markdown("##### A등급 vs D등급 도로환경 비교")
+            st.caption("안전등급 최상위(A)와 최하위(D) 학교의 로드뷰 · CV 지표를 직접 비교합니다.")
             # 대표 선정: A등급 중 활성_안전점수 최고, D등급 중 최저
             _a_rep = _a_schools.sort_values("활성_안전점수", ascending=False).iloc[0]
             _d_rep = _d_schools.sort_values("활성_안전점수", ascending=True).iloc[0]
@@ -1969,7 +1973,7 @@ with tab_district:
         fig_traffic = px.bar(
             traffic_melted, x="평균교통량", y="호선명", color="시간대",
             orientation="h", barmode="group",
-            title="성남 인근 주요 국도 등하교 시간대 평균 교통량",
+            title="성남 인근 주요 국도 등하교 시간대 평균 교통량 (성남시 기준)",
             labels={"평균교통량": "평균 교통량 (대)", "호선명": "", "시간대": ""},
             color_discrete_map={"등교": "#E67E22", "하교": "#F1C40F"},
         )
@@ -2021,7 +2025,6 @@ with tab_sim:
     gm_k4.metric("모델 R²", f"{model_r2:.3f}")
 
     # ── (b) 광명 지도 ──
-    GS_GRADE_COLORS = {"A": "#27AE60", "B": "#F1C40F", "C": "#E67E22", "D": "#E74C3C"}
     gm_map = folium.Map(
         location=[df_gm["위도"].mean(), df_gm["경도"].mean()],
         zoom_start=13, tiles=None,
@@ -2031,7 +2034,7 @@ with tab_sim:
         attr="Google", name="기본 지도", max_zoom=22,
     ).add_to(gm_map)
     for _, gm_r in gm_result.iterrows():
-        gm_color = GS_GRADE_COLORS.get(gm_r["예상등급"], "#999")
+        gm_color = GRADE_COLORS.get(gm_r["예상등급"], "#999")
         folium.CircleMarker(
             [gm_r["위도"], gm_r["경도"]],
             radius=8, color="#fff", weight=2,
@@ -2048,7 +2051,7 @@ with tab_sim:
             names=gm_grade_cnt.index, values=gm_grade_cnt.values,
             title="광명시 예상 등급 분포",
             color=gm_grade_cnt.index,
-            color_discrete_map=GS_GRADE_COLORS,
+            color_discrete_map=GRADE_COLORS,
         )
         fig_gm_pie.update_layout(**PLOTLY_LAYOUT, height=350)
         st.plotly_chart(fig_gm_pie, use_container_width=True)
@@ -2141,9 +2144,9 @@ with tab_method:
         '<div style="background:#FEF5E7;padding:16px 20px;border-radius:10px;'
         'border-left:4px solid #E67E22;margin-bottom:16px;">'
         '<span style="font-size:14px;color:#2C3E50;">'
-        '<b style="color:#2C3E50;">목표:</b> 성남시 어린이 보호구역(스쿨존) 136개소의 '
+        '<b style="color:#2C3E50;">목표:</b> 어린이 보호구역(스쿨존)의 '
         '안전등급을 데이터 기반으로 분석하여, 시설물 투자 우선순위를 제공합니다.<br><br>'
-        '<b style="color:#2C3E50;">분석 대상:</b> 성남시·광명시 136개소<br>'
+        '<b style="color:#2C3E50;">분석 대상:</b> 성남시 142개소 + 광명시 51개소<br>'
         '<b style="color:#2C3E50;">분석 기간:</b> 2018~2023년 사고 데이터 + 2024년 시설 현황<br>'
         '<b style="color:#2C3E50;">핵심 메시지:</b> 스쿨존 사고는 <b>도로 구조 + 정책(시설) + 노출(어린이)</b>의 결합 결과이며, '
         '시설물 투입이 사고 예방의 핵심이다.'
@@ -2379,7 +2382,7 @@ with tab_method:
         '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">경기데이터드림</td>'
         '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">행정동별 연령별 인구 (어린이비율)</td>'
         '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
-        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">성남시</td>'
+        '<tr><td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">광명시</td>'
         '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">광명시 어린이보호구역 시설물·사고 데이터</td>'
         '<td style="padding:6px 12px;border-bottom:1px solid #F5CBA7;">2024</td></tr>'
         '<tr><td style="padding:6px 12px;">카카오맵 로드뷰</td>'
